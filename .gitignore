@@ -1,0 +1,16 @@
+node_modules
+.next
+.DS_Store
+
+# rendered output is generated at runtime, never committed
+public/out/*
+!public/out/.gitkeep
+
+# secrets — .env.example is the committed template
+.env
+.env.local
+
+# capture-hook error sink (the logs themselves ARE committed)
+.agent-logs/.capture-errors.log
+
+work

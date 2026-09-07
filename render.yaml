@@ -1,0 +1,39 @@
+# One-click Render blueprint. Free plan, Docker runtime, no credit card.
+#
+# The four API keys are marked sync:false - Render prompts for them at deploy
+# time and never stores them in the repo. Every one of them is optional: the
+# pipeline degrades to hardcoded defaults rather than failing, so the service
+# is useful the moment it boots and better once the keys are in.
+services:
+  - type: web
+    name: ugc-video-generator
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      # Output geometry. Drop VIDEO_HEIGHT to 1280 if 0.1 CPU proves too slow
+      # for 1080x1920 - the renderer derives width and sticker size from it.
+      - key: VIDEO_HEIGHT
+        value: "1920"
+      - key: VIDEO_DURATION
+        value: "8"
+      - key: VIDEO_PRESET
+        value: veryfast
+      # Threads barely move the needle here (1.66s vs 1.68s measured): the
+      # filter graph dominates, not the encoder. Kept low to protect the
+      # 512 MB ceiling.
+      - key: FFMPEG_THREADS
+        value: "2"
+      - key: NODE_ENV
+        value: production
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: PEXELS_API_KEY
+        sync: false
+      - key: GIPHY_API_KEY
+        sync: false

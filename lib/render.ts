@@ -162,7 +162,7 @@ export function buildArgs(input: RenderInput, cfg = renderConfig()): string[] {
 function sampleRss(pid: number): number {
   try {
     if (process.platform === "linux") {
-      const status = readFileSync(`/proc/${pid}/status`, "utf8");
+      const status = readFileSync(/* turbopackIgnore: true */ `/proc/${pid}/status`, "utf8");
       const m = status.match(/VmHWM:\s+(\d+)\s+kB/);
       if (m) return Number(m[1]) * 1024;
     }
@@ -176,7 +176,7 @@ function containerPeakRss(): number {
   for (const f of ["/sys/fs/cgroup/memory.peak", "/sys/fs/cgroup/memory/memory.max_usage_in_bytes"]) {
     try {
       if (existsSync(f)) {
-        const v = Number(readFileSync(f, "utf8").trim());
+        const v = Number(readFileSync(/* turbopackIgnore: true */ f, "utf8").trim());
         if (Number.isFinite(v) && v > 0) return v;
       }
     } catch {

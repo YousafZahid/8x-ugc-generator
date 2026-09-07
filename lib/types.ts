@@ -1,31 +1,96 @@
+/**
+ * Shared shapes for the pipeline: page -> brief -> assets -> render.
+ *
+ * Replaces an earlier voiceover-ad scaffold. There is no TTS in this product:
+ * the brief is prohibited from AI-generated media, so audio comes from a
+ * committed royalty-free library and every visible pixel is a real asset.
+ */
+
+/** What we managed to learn from the product URL. Every field may be empty. */
 export type Product = {
   url: string;
+  host: string;
   title: string;
-  price: string | null;
-  description: string | null;
-  brand: string | null;
-  images: string[];
+  description: string;
+  siteName: string;
+  /** Best hero image found on the page, if any. Used as a background fallback. */
+  image: string | null;
+  /** Trimmed page text, capped before it reaches an LLM. */
+  text: string;
+  /** How we got the content. "domain" means every fetch failed and we guessed. */
+  via: "og" | "html" | "jina" | "domain";
 };
 
-export type Beat = {
-  /** What the voiceover says for this shot. One or two short sentences. */
-  vo: string;
-  /** Index into Product.images that this beat should show. */
-  image: number;
+/** The vibe vocabulary. Audio files are tagged with these; the LLM picks one. */
+export const VIBES = ["upbeat", "chill", "hype", "playful", "cinematic", "clean"] as const;
+export type Vibe = (typeof VIBES)[number];
+
+/** The creative decision. Produced by an LLM, or by heuristics when none is reachable. */
+export type Brief = {
+  /** Product name as a human would say it. */
+  name: string;
+  /** e.g. "calorie tracking app" */
+  category: string;
+  /** One line, plain language, no marketing fluff. */
+  valueProp: string;
+  audience: string;
+  vibe: Vibe;
+  /** First text card. Short, punchy, scroll-stopping. */
+  hook: string;
+  /** Second text card. The payoff or CTA. */
+  payoff: string;
+  /** Search terms for Pexels. Concrete and filmable, not abstract. */
+  backgroundQuery: string;
+  /** Search term for Giphy stickers. One or two words works best. */
+  stickerQuery: string;
+  /** Where the brief came from, so the UI can be honest about it. */
+  source: "llm" | "fallback";
 };
 
-export type VideoScript = {
-  hook: Beat;
-  benefits: Beat[];
-  cta: Beat;
+/** One chosen asset plus the attribution we owe for it. */
+export type Asset = {
+  /** Local path on disk once downloaded. */
+  path: string;
+  /** Where it came from, for CREDITS and the UI. */
+  source: "pexels" | "giphy" | "local" | "fixture";
+  credit: string;
+  /** Canonical page for the asset, for attribution links. */
+  link: string | null;
 };
+
+export type AssetSet = {
+  background: Asset;
+  sticker: Asset;
+  audio: Asset;
+};
+
+/** Progress stages, in the order the chat displays them. */
+export type Step = "understand" | "assets" | "compose" | "done" | "error";
 
 export type Progress = {
-  step: "scrape" | "script" | "voice" | "render" | "done" | "error";
+  step: Step;
   detail: string;
 };
 
-/** Flattens a script into the ordered beat list the renderer consumes. */
-export function beatsOf(s: VideoScript): Beat[] {
-  return [s.hook, ...s.benefits, s.cta];
-}
+export type RenderJob = {
+  id: string;
+  createdAt: number;
+  status: Step;
+  /** Everything emitted so far, so a reconnecting client can catch up. */
+  events: Progress[];
+  product?: Product;
+  brief?: Brief;
+  assets?: AssetSet;
+  /** Public URL of the finished mp4, once there is one. */
+  videoUrl?: string;
+  /** Human-readable, never a raw stack trace. */
+  error?: string;
+};
+
+/** A chat turn as the UI stores it. */
+export type ChatMessage = {
+  role: "user" | "assistant";
+  text: string;
+  jobId?: string;
+  videoUrl?: string;
+};

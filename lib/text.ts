@@ -1,0 +1,158 @@
+/**
+ * Text cards, drawn as SVG and rasterised to transparent PNG with sharp.
+ *
+ * Deliberately not ffmpeg's drawtext: escaping user-supplied copy into a
+ * filter_complex is a footgun, drawtext cannot wrap, and it cannot do the
+ * stroke-plus-shadow treatment that makes text readable over arbitrary
+ * stock footage. SVG gives real typography for about the same effort.
+ *
+ * Wrapping is done by estimating advance width rather than measuring: there is
+ * no text metrics API here, and for a heavy sans at these sizes the estimate is
+ * within a few percent, which is all a centred block needs.
+ */
+
+import sharp from "sharp";
+
+export type CardVariant = "hook" | "payoff";
+
+export type CardSpec = {
+  text: string;
+  /** Small line above the headline, usually the product name. */
+  kicker?: string;
+  variant: CardVariant;
+  width: number;
+  height: number;
+  /** Absolute path to write to. */
+  out: string;
+};
+
+/**
+ * Font stack, not a single family. The container installs DejaVu; macOS
+ * resolves Helvetica. Both are heavy neutral sans faces, so the layout maths
+ * holds either way.
+ */
+const FONT = "Inter, 'DejaVu Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif";
+
+/** Mean advance width as a fraction of font-size, for a bold sans. */
+const ADVANCE = 0.56;
+const ADVANCE_UPPER = 0.62;
+
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+/** Greedy wrap against an estimated pixel budget. Long single words are kept whole. */
+function wrap(text: string, fontSize: number, maxWidth: number, upper: boolean): string[] {
+  const advance = (upper ? ADVANCE_UPPER : ADVANCE) * fontSize;
+  const budget = Math.max(1, Math.floor(maxWidth / advance));
+  const lines: string[] = [];
+  let line = "";
+
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (candidate.length <= budget || !line) line = candidate;
+    else {
+      lines.push(line);
+      line = word;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+/**
+ * Picks the largest font size that fits the copy in `maxLines`.
+ * Short hooks come out huge, long ones step down instead of overflowing.
+ */
+function fit(text: string, width: number, upper: boolean, startSize: number, maxLines: number) {
+  const maxWidth = width * 0.84;
+  let size = startSize;
+  for (let i = 0; i < 14; i++) {
+    const lines = wrap(text, size, maxWidth, upper);
+    if (lines.length <= maxLines) return { size, lines };
+    size = Math.round(size * 0.92);
+  }
+  return { size, lines: wrap(text, size, maxWidth, upper).slice(0, maxLines) };
+}
+
+export function buildSvg(spec: CardSpec): string {
+  const { width: W, height: H, variant } = spec;
+  const upper = variant === "hook";
+  const copy = upper ? spec.text.toUpperCase() : spec.text;
+
+  const { size, lines } = fit(copy, W, upper, Math.round(W * 0.105), variant === "hook" ? 3 : 2);
+  const lineHeight = Math.round(size * 1.12);
+  const stroke = Math.max(4, Math.round(size * 0.13));
+
+  // Both variants sit in the upper third, above the sticker at 0.6H.
+  const blockTop = Math.round(H * 0.15);
+  const kickerSize = Math.round(size * 0.34);
+  const kickerGap = spec.kicker ? Math.round(kickerSize * 2.1) : 0;
+  const firstBaseline = blockTop + kickerGap + size;
+
+  const tspans = lines
+    .map((line, i) => {
+      const y = firstBaseline + i * lineHeight;
+      return `<text x="${W / 2}" y="${y}" class="hl">${escapeXml(line)}</text>`;
+    })
+    .join("\n    ");
+
+  const kicker = spec.kicker
+    ? `<text x="${W / 2}" y="${blockTop + kickerSize}" class="kick">${escapeXml(
+        spec.kicker.toUpperCase()
+      )}</text>`
+    : "";
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+  <defs>
+    <filter id="sh" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="${Math.round(size * 0.06)}" stdDeviation="${Math.round(
+        size * 0.07
+      )}" flood-color="#000" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+  <style>
+    .hl {
+      font-family: ${FONT};
+      font-size: ${size}px;
+      font-weight: 800;
+      letter-spacing: ${upper ? "-0.01em" : "-0.02em"};
+      text-anchor: middle;
+      fill: #ffffff;
+      stroke: #000000;
+      stroke-width: ${stroke}px;
+      stroke-linejoin: round;
+      paint-order: stroke fill;
+      filter: url(#sh);
+    }
+    .kick {
+      font-family: ${FONT};
+      font-size: ${kickerSize}px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-anchor: middle;
+      fill: #ffe14d;
+      stroke: #000000;
+      stroke-width: ${Math.max(3, Math.round(kickerSize * 0.16))}px;
+      stroke-linejoin: round;
+      paint-order: stroke fill;
+    }
+  </style>
+  ${kicker}
+    ${tspans}
+</svg>`;
+}
+
+/** Rasterises one card to a transparent PNG. Returns the path written. */
+export async function textCardPng(spec: CardSpec): Promise<string> {
+  const svg = buildSvg(spec);
+  await sharp(Buffer.from(svg))
+    .png({ compressionLevel: 6 })
+    .toFile(spec.out);
+  return spec.out;
+}

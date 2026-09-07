@@ -39,8 +39,10 @@ COPY --from=build /app/fixtures ./fixtures
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/next.config.ts ./next.config.ts
 
-# Rendered output is written here at runtime and served as a static file.
-RUN mkdir -p /app/public/out
+# Rendered output goes to an ephemeral dir under /tmp (see lib/storage.ts) and
+# is served by app/api/video/[id]. The free plan has no persistent disk and
+# wipes the filesystem on idle spin-down; that is accepted, not worked around.
+ENV RENDER_OUT_DIR=/tmp/ugc-renders
 
 EXPOSE 3000
 CMD ["npm", "run", "start"]

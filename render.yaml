@@ -29,6 +29,16 @@ services:
         value: "2"
       - key: NODE_ENV
         value: production
+      # No `disk:` block on purpose. Free instances cannot attach one, and
+      # rendered videos are deliberately ephemeral - they need to outlive the
+      # chat session, not the week. Retention is capped instead, so a busy
+      # afternoon cannot fill the 512 MB instance and ENOSPC the next render.
+      - key: RENDER_OUT_DIR
+        value: /tmp/ugc-renders
+      - key: OUT_MAX_FILES
+        value: "12"
+      - key: OUT_MAX_BYTES
+        value: "120000000"
       - key: GROQ_API_KEY
         sync: false
       - key: GEMINI_API_KEY

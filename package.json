@@ -8,7 +8,8 @@
     "start": "next start -p ${PORT:-3000}",
     "smoke": "tsx scripts/render-smoke.ts",
     "typecheck": "tsc --noEmit",
-    "fixtures": "tsx scripts/make-fixtures.ts"
+    "fixtures": "tsx scripts/make-fixtures.ts",
+    "check-keys": "tsx scripts/check-keys.ts"
   },
   "dependencies": {
     "cheerio": "1.0.0",

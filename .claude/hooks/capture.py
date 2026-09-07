@@ -31,6 +31,41 @@ FALLBACK_MODEL = "claude-opus-5[1m]"
 FALLBACK_AUTHOR = "YousafZahid"
 
 
+# Secrets must never reach .agent-logs/. The log is a committed deliverable on
+# a public repo, and prompts are captured verbatim - one pasted key block is
+# enough to leak. GitHub push protection caught exactly this once; this is the
+# belt to that braces.
+SECRET_PATTERNS = [
+    # Provider-specific formats, matched on their distinctive prefixes.
+    re.compile(r"\bgsk_[A-Za-z0-9]{20,}"),                 # Groq
+    re.compile(r"\bAIza[0-9A-Za-z_\-]{30,}"),              # Google
+    re.compile(r"\brnd_[A-Za-z0-9]{20,}"),                 # Render
+    re.compile(r"\bsk-(?:ant-)?[A-Za-z0-9_\-]{20,}"),      # OpenAI / Anthropic
+    re.compile(r"\bghp_[A-Za-z0-9]{30,}"),                 # GitHub PAT
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{30,}"),
+    re.compile(r"\bxox[baprs]-[A-Za-z0-9\-]{10,}"),        # Slack
+    # Generic NAME=value / NAME: value for anything key-shaped. Catches the
+    # providers whose keys are just opaque alphanumerics (Pexels, Giphy,
+    # Pixabay) and have no prefix to match on.
+    re.compile(
+        r"(?im)^(\s*[A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD)\s*[=:]\s*)(\S{8,})$"
+    ),
+]
+
+
+def redact(text: str) -> str:
+    """Strips anything key-shaped, preserving the variable name for context."""
+    if not text:
+        return text
+    out = text
+    for pattern in SECRET_PATTERNS:
+        if pattern.groups == 2:
+            out = pattern.sub(lambda m: f"{m.group(1)}<REDACTED>", out)
+        else:
+            out = pattern.sub("<REDACTED>", out)
+    return out
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.") + \
         f"{datetime.now(timezone.utc).microsecond // 1000:03d}Z"
@@ -205,7 +240,7 @@ def main() -> None:
         model = latest_model(entries)
         init_file(path, session_id, model, project, who, now)
         num = prompt_count(path) + 1
-        append_entry(path, "PROMPT", num, session_id, model, now, body.strip())
+        append_entry(path, "PROMPT", num, session_id, model, now, redact(body.strip()))
         bump_frontmatter(path, num, now)
 
     elif event == "Stop":
@@ -215,7 +250,7 @@ def main() -> None:
             return
         init_file(path, session_id, model, project, who, now)
         num = max(prompt_count(path), 1)
-        append_entry(path, "RESPONSE", num, session_id, model, now, body)
+        append_entry(path, "RESPONSE", num, session_id, model, now, redact(body))
         bump_frontmatter(path, num, now)
 
     else:

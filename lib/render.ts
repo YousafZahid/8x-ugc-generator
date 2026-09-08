@@ -235,3 +235,26 @@ export async function render(input: RenderInput, cfg = renderConfig()): Promise<
     argv,
   };
 }
+
+/**
+ * Grabs one frame as a JPEG poster. Cheap - a single frame decode - and it is
+ * what stops the player showing a grey box before the video buffers.
+ * Failure is non-fatal: the video is already rendered and playable.
+ */
+export async function posterFrame(
+  video: string,
+  out: string,
+  atSeconds = 1,
+  cfg = renderConfig()
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const proc = spawn(cfg.ffmpeg, [
+      "-y", "-hide_banner", "-loglevel", "error",
+      "-ss", String(atSeconds), "-i", video,
+      "-frames:v", "1", "-q:v", "4",
+      out,
+    ], { stdio: "ignore" });
+    proc.on("error", () => resolve(false));
+    proc.on("close", (code) => resolve(code === 0));
+  });
+}

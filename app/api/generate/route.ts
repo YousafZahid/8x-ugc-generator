@@ -64,6 +64,7 @@ export async function GET(req: Request) {
         else if (job.result) {
           send("done", {
             videoUrl: job.result.videoUrl,
+            posterUrl: job.result.posterUrl,
             brief: job.result.brief,
             credits: job.result.credits,
             notes: job.result.notes,

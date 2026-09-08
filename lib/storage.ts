@@ -47,6 +47,21 @@ export function videoUrl(id: string): string {
   return `/api/video/${id}`;
 }
 
+/**
+ * A still from the video, used as the player's poster.
+ *
+ * Without one the payoff moment is a grey rectangle until enough of the file
+ * has buffered to paint a frame - on a slow connection that reads as broken.
+ */
+export function posterPath(id: string): string {
+  if (!isValidId(id)) throw new Error(`invalid video id: ${id}`);
+  return path.join(OUT_DIR, `${path.basename(id)}.jpg`);
+}
+
+export function posterUrl(id: string): string {
+  return `/api/video/${id}?poster=1`;
+}
+
 export type Pruned = { deleted: string[]; keptFiles: number; keptBytes: number };
 
 /** Trims the output directory back under both caps, oldest first. */
@@ -87,6 +102,8 @@ export async function prune(): Promise<Pruned> {
     }
     try {
       await unlink(path.join(OUT_DIR, f.name));
+      // The poster is worthless without its video.
+      await unlink(path.join(OUT_DIR, f.name.replace(/\.mp4$/, ".jpg"))).catch(() => {});
       deleted.push(f.name);
     } catch {
       // Already gone, or in use. Counting it as kept would be a lie, but

@@ -13,15 +13,17 @@ import path from "node:path";
 
 import { selectAssets } from "./assets";
 import { buildBrief } from "./brief";
-import { render, renderConfig } from "./render";
+import { posterFrame, render, renderConfig } from "./render";
 import { scrape, extractUrl } from "./scrape";
-import { ensureOutDir, prune, videoPath, videoUrl } from "./storage";
+import { ensureOutDir, posterPath, posterUrl, prune, videoPath, videoUrl } from "./storage";
 import { textCardPng } from "./text";
 import type { AssetSet, Brief, Product, Progress } from "./types";
 
 export type GenerateResult = {
   id: string;
   videoUrl: string;
+  /** Still frame for the player, so the payoff is not a grey box. */
+  posterUrl: string | null;
   product: Product;
   brief: Brief;
   assets: AssetSet;
@@ -56,7 +58,7 @@ export async function generate(
 
   try {
     // 1. Read the site.
-    onProgress({ step: "understand", detail: `Reading ${new URL(url).hostname}…` });
+    onProgress({ step: "read", detail: `Reading ${new URL(url).hostname}` });
     const t0 = Date.now();
     const product = await scrape(url);
     const scrapeMs = Date.now() - t0;
@@ -65,10 +67,17 @@ export async function generate(
     }
 
     // 2. Decide the creative.
-    onProgress({ step: "understand", detail: `Working out what ${product.title || url} is…` });
+    onProgress({ step: "understand", detail: "Working out what it is" });
     const t1 = Date.now();
     const { brief, provider, errors } = await buildBrief(product, message);
     const briefMs = Date.now() - t1;
+
+    // Show the user we understood them before the slow part starts.
+    onProgress({
+      step: "understand",
+      detail: `Understood: ${brief.name}${brief.category ? ` — ${brief.category}` : ""}`,
+      meta: { product: brief.name, hook: brief.hook },
+    });
     if (brief.source === "fallback") {
       notes.push(`wrote the copy without an LLM (${errors[0] ?? "no provider available"})`);
     }
@@ -76,7 +85,7 @@ export async function generate(
     // 3. Cast it.
     onProgress({
       step: "assets",
-      detail: `Finding footage for "${brief.backgroundQuery}" and a ${brief.stickerQuery} sticker…`,
+      detail: `Finding "${brief.backgroundQuery}" footage and a ${brief.stickerQuery} sticker`,
     });
     const t2 = Date.now();
     const { assets, notes: assetNotes } = await selectAssets(brief, work);
@@ -84,7 +93,7 @@ export async function generate(
     const assetsMs = Date.now() - t2;
 
     // 4. Draw the text, then composite.
-    onProgress({ step: "compose", detail: "Building the video…" });
+    onProgress({ step: "compose", detail: "Compositing four layers with ffmpeg" });
     const t3 = Date.now();
 
     const half = cfg.duration / 2;
@@ -122,6 +131,9 @@ export async function generate(
     );
     const renderMs = Date.now() - t3;
 
+    // Non-fatal: a missing poster costs polish, not the video.
+    const hasPoster = await posterFrame(out, posterPath(id), Math.min(1.5, cfg.duration / 4), cfg);
+
     // Keep the ephemeral directory under its cap.
     const pruned = await prune();
     if (pruned.deleted.length) {
@@ -140,6 +152,7 @@ export async function generate(
     return {
       id,
       videoUrl: videoUrl(id),
+      posterUrl: hasPoster ? posterUrl(id) : null,
       product,
       brief: { ...brief, source: provider ? "llm" : brief.source },
       assets,

@@ -65,11 +65,21 @@ export type AssetSet = {
 };
 
 /** Progress stages, in the order the chat displays them. */
-export type Step = "understand" | "assets" | "compose" | "done" | "error";
+export type Step = "read" | "understand" | "assets" | "compose" | "done" | "error";
+
+/** Ordered stage list the UI renders as a checklist. */
+export const STEP_ORDER: Step[] = ["read", "understand", "assets", "compose"];
 
 export type Progress = {
   step: Step;
   detail: string;
+  /** Findings worth showing before the video exists. */
+  meta?: {
+    /** Product name, once the page has been read and understood. */
+    product?: string;
+    /** The hook, so the user sees the copy before the render lands. */
+    hook?: string;
+  };
 };
 
 export type RenderJob = {

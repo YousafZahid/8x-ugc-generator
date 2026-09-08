@@ -1,7 +1,9 @@
 import { Readable } from "node:stream";
 import type { ReadableStream as WebReadableStream } from "node:stream/web";
 
-import { isValidId, videoStat, videoStream } from "@/lib/storage";
+import { readFile } from "node:fs/promises";
+
+import { isValidId, posterPath, videoStat, videoStream } from "@/lib/storage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +26,22 @@ export async function GET(
 
   if (!isValidId(id)) {
     return Response.json({ error: "bad id" }, { status: 400 });
+  }
+
+  // Poster frames are small and static - just send the bytes.
+  if (new URL(req.url).searchParams.get("poster")) {
+    try {
+      const jpg = await readFile(posterPath(id));
+      return new Response(new Uint8Array(jpg), {
+        headers: {
+          "Content-Type": "image/jpeg",
+          "Cache-Control": "public, max-age=3600",
+          "Content-Length": String(jpg.byteLength),
+        },
+      });
+    } catch {
+      return Response.json({ error: "no poster" }, { status: 404 });
+    }
   }
 
   const info = await videoStat(id);

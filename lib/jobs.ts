@@ -40,7 +40,7 @@ export function createJob(id: string): Job {
   const job: Job = {
     id,
     createdAt: Date.now(),
-    status: "understand",
+    status: "read",
     events: [],
     listeners: new Set(),
     done: false,

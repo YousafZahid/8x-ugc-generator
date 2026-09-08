@@ -92,7 +92,9 @@ export function buildSvg(spec: CardSpec): string {
   // Both variants sit in the upper third, above the sticker at 0.6H.
   const blockTop = Math.round(H * 0.15);
   const kickerSize = Math.round(size * 0.34);
-  const kickerGap = spec.kicker ? Math.round(kickerSize * 2.1) : 0;
+  // Generous: the headline carries a heavy stroke plus a drop shadow, both of
+  // which grow its visual box well past the type metrics.
+  const kickerGap = spec.kicker ? Math.round(kickerSize * 3.0) : 0;
   const firstBaseline = blockTop + kickerGap + size;
 
   const tspans = lines

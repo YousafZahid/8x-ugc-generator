@@ -1,0 +1,50 @@
+[
+  {
+    "file": "upbeat.mp3",
+    "vibe": "upbeat",
+    "title": "Bright Steps",
+    "bpm": 122,
+    "seconds": 16,
+    "source": "synthesised by scripts/make-audio.ts"
+  },
+  {
+    "file": "chill.mp3",
+    "vibe": "chill",
+    "title": "Slow Light",
+    "bpm": 84,
+    "seconds": 16,
+    "source": "synthesised by scripts/make-audio.ts"
+  },
+  {
+    "file": "hype.mp3",
+    "vibe": "hype",
+    "title": "Push",
+    "bpm": 140,
+    "seconds": 16,
+    "source": "synthesised by scripts/make-audio.ts"
+  },
+  {
+    "file": "playful.mp3",
+    "vibe": "playful",
+    "title": "Bounce",
+    "bpm": 128,
+    "seconds": 16,
+    "source": "synthesised by scripts/make-audio.ts"
+  },
+  {
+    "file": "cinematic.mp3",
+    "vibe": "cinematic",
+    "title": "Wide Open",
+    "bpm": 70,
+    "seconds": 16,
+    "source": "synthesised by scripts/make-audio.ts"
+  },
+  {
+    "file": "clean.mp3",
+    "vibe": "clean",
+    "title": "Plain Air",
+    "bpm": 104,
+    "seconds": 16,
+    "source": "synthesised by scripts/make-audio.ts"
+  }
+]

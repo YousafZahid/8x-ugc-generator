@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+
+import { manifest } from "@/lib/audio";
 import { promisify } from "node:util";
 
 export const runtime = "nodejs";
@@ -32,6 +34,9 @@ export async function GET() {
         duration: process.env.VIDEO_DURATION ?? "8",
         preset: process.env.VIDEO_PRESET ?? "veryfast",
       },
+      // Surfaced because an empty library is invisible otherwise: every render
+      // still succeeds, just with the fixture tone bed under it.
+      audioTracks: manifest().length,
       keys: {
         groq: Boolean(process.env.GROQ_API_KEY),
         gemini: Boolean(process.env.GEMINI_API_KEY),

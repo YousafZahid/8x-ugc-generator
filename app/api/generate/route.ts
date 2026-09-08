@@ -65,6 +65,10 @@ export async function GET(req: Request) {
           send("done", {
             videoUrl: job.result.videoUrl,
             posterUrl: job.result.posterUrl,
+            // Enough to explain the render without opening the file.
+            layout: job.result.layout,
+            audioOffset: job.result.audioOffset,
+            track: job.result.assets.audio.path.split("/").pop(),
             brief: job.result.brief,
             credits: job.result.credits,
             notes: job.result.notes,

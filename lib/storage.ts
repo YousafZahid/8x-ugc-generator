@@ -19,7 +19,7 @@ import { mkdir, readdir, stat, unlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-export const OUT_DIR = process.env.RENDER_OUT_DIR ?? path.join(os.tmpdir(), "ugc-renders");
+export const OUT_DIR = process.env.VIDEO_OUT_DIR ?? path.join(os.tmpdir(), "ugc-renders");
 
 const MAX_FILES = Number(process.env.OUT_MAX_FILES ?? 12);
 const MAX_BYTES = Number(process.env.OUT_MAX_BYTES ?? 120 * 1024 * 1024);

@@ -42,7 +42,7 @@ COPY --from=build /app/next.config.ts ./next.config.ts
 # Rendered output goes to an ephemeral dir under /tmp (see lib/storage.ts) and
 # is served by app/api/video/[id]. The free plan has no persistent disk and
 # wipes the filesystem on idle spin-down; that is accepted, not worked around.
-ENV RENDER_OUT_DIR=/tmp/ugc-renders
+ENV VIDEO_OUT_DIR=/tmp/ugc-renders
 
 EXPOSE 3000
 CMD ["npm", "run", "start"]

@@ -250,11 +250,13 @@ export function fallbackBrief(product: Product, message: string): Brief {
   };
 }
 
-export async function buildBrief(
-  product: Product,
-  message: string
-): Promise<{ brief: Brief; provider: string | null; ms: number; errors: string[] }> {
-  const context = [
+/**
+ * The exact text the model sees. Exported so it can be inspected: the sticker
+ * and footage terms are only as good as this, and "what did the model actually
+ * read?" should not require adding a print statement.
+ */
+export function briefContext(product: Product, message: string): string {
+  return [
     `URL: ${product.url}`,
     `Scrape tier: ${product.via}${product.via === "domain" ? " (site unreachable - work from the name and the user's message)" : ""}`,
     product.title && `Page title: ${product.title}`,
@@ -265,6 +267,13 @@ export async function buildBrief(
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+export async function buildBrief(
+  product: Product,
+  message: string
+): Promise<{ brief: Brief; provider: string | null; ms: number; errors: string[] }> {
+  const context = briefContext(product, message);
 
   const { data, provider, ms, errors } = await jsonCompletion<RawBrief>({
     system: systemPrompt(),

@@ -18,7 +18,7 @@ export type Product = {
   /** Trimmed page text, capped before it reaches an LLM. */
   text: string;
   /** How we got the content. "domain" means every fetch failed and we guessed. */
-  via: "og" | "html" | "jina" | "domain";
+  via: "og" | "og+jina" | "html" | "jina" | "domain";
 };
 
 /** The vibe vocabulary. Audio files are tagged with these; the LLM picks one. */

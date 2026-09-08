@@ -26,6 +26,17 @@ const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
+/**
+ * Jina gets the opposite treatment: an honest bot UA.
+ *
+ * Sending the browser UA above made r.jina.ai return a Cloudflare "Just a
+ * moment..." challenge with HTTP 403 every time, because a browser UA arriving
+ * with non-browser TLS looks like exactly what it is. Jina exists to be called
+ * by programs, so identifying as one is what gets through. Measured: browser
+ * UA 403 in 153ms, every other UA 200 with 12,946 characters.
+ */
+const READER_UA = "8x-ugc-generator/1.0";
+
 /** Pulls the first http(s) URL out of free text, tolerating bare domains. */
 export function extractUrl(message: string): string | null {
   const explicit = message.match(/https?:\/\/[^\s<>()"']+/i);
@@ -147,12 +158,30 @@ function isThin(p: Omit<Product, "via">): boolean {
 }
 
 /**
+ * Enough body text to reason about a product's niche from.
+ *
+ * Separate from isThin on purpose. A JS-rendered marketing site serves good
+ * OG tags and an empty body: duolingo.com came back with a title, a meta
+ * description and ZERO characters of page text, which passed isThin and never
+ * escalated. The model was then briefed on 263 characters, of which the only
+ * substantive line was "Learn languages by playing a game" - which is exactly
+ * why every downstream choice drifted toward gaming.
+ */
+const MIN_BODY_TEXT = 400;
+
+/**
  * Parses r.jina.ai output. Returns null when the reader came back but has
  * nothing usable - it answers 200 even for pages it could not read, emitting
  * a CAPTCHA warning and an empty body, so length alone is not enough.
  */
 export function parseReader(reader: string, url: string): Product | null {
+  // A bot-check interstitial parses into several thousand characters of
+  // plausible-looking text. Only the HTTP status caught it before; catch the
+  // body too, in case a challenge is ever served with a 200.
   if (/requiring CAPTCHA|Warning: This page/i.test(reader)) return null;
+  if (/Just a moment|cf-browser-verification|Enable JavaScript and cookies/i.test(reader)) {
+    return null;
+  }
 
   const host = hostOf(url);
   const titleLine = reader.match(/^Title:\s*(.+)$/m)?.[1]?.trim() ?? "";
@@ -184,15 +213,44 @@ export async function scrape(url: string): Promise<Product> {
 
   // Tier 1 - straight at the site.
   const html = await get(url);
-  if (html) {
-    const parsed = parseHtml(html, url);
-    if (!isThin(parsed)) return { ...parsed, via: "og" };
+  const parsed = html ? parseHtml(html, url) : null;
+
+  // Good OG tags AND real body text: nothing more to fetch.
+  if (parsed && !isThin(parsed) && parsed.text.length >= MIN_BODY_TEXT) {
+    return { ...parsed, via: "og" };
   }
 
   // Tier 2 - Jina's reader. Free, no key, renders JS and sidesteps soft blocks.
-  const reader = await get(`https://r.jina.ai/${url}`, { Accept: "text/plain" });
+  const reader = await get(`https://r.jina.ai/${url}`, {
+    Accept: "text/plain",
+    "User-Agent": READER_UA,
+  });
   const parsedReader = reader ? parseReader(reader, url) : null;
+
+  // Merge rather than replace. OG tags are authored metadata and are usually
+  // better than anything scraped from the rendered page; what tier 1 lacked
+  // was body text, so take that from the reader and keep the rest.
+  if (parsed && !isThin(parsed)) {
+    if (parsedReader && parsedReader.text.length > parsed.text.length) {
+      return {
+        ...parsed,
+        text: parsedReader.text,
+        description: parsed.description || parsedReader.description,
+        via: "og+jina",
+      };
+    }
+    return { ...parsed, via: "og" };
+  }
+
   if (parsedReader) return parsedReader;
+
+  // A thin page still beats guessing from the domain. Escalating on thin body
+  // text meant a site whose direct fetch was weak AND whose reader call failed
+  // lost its OG title too - whoop.com fell all the way to "domain" when it had
+  // a perfectly good title.
+  if (parsed && (parsed.title.length >= 3 || parsed.description.length >= 20)) {
+    return { ...parsed, via: "og" };
+  }
 
   // Tier 3 - never fails. The brief stage can still work from a name.
   return {

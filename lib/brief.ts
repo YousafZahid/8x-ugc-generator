@@ -32,57 +32,58 @@ function examples(): string {
   if (process.env.BRIEF_NO_EXAMPLES) return "";
   return `
 Worked examples. Match this register - the hook is a thought the viewer has
-already had, not a product claim.
+already had, not a product claim. Never reuse this copy; it is a register
+guide, not a template.
 
-Input: a wearable that tracks recovery, strain and sleep.
+Input: a subscription that ships running shoes twice a year.
 {
-  "name": "WHOOP",
-  "category": "recovery wearable",
-  "valueProp": "tracks your sleep and strain so you know when to push and when to rest",
-  "audience": "people who train hard",
+  "name": "Stride",
+  "category": "running shoe subscription",
+  "valueProp": "sends you fresh running shoes before the old pair wears out",
+  "audience": "regular runners",
   "vibe": "hype",
-  "hook": "training hard and still exhausted?",
-  "payoff": "whoop tells you when to rest",
-  "backgroundQuery": "person lifting weights gym",
-  "stickerQuery": "muscle"
+  "hook": "running on shoes from two years ago?",
+  "payoff": "fresh pair, every season",
+  "backgroundQuery": "person running city street",
+  "stickerQuery": "running shoe"
 }
 
-Input: a launcher that runs commands and scripts from a keyboard shortcut.
+Input: a password manager that fills logins across devices.
 {
-  "name": "Raycast",
-  "category": "mac launcher",
-  "valueProp": "runs your tools and scripts from one keyboard shortcut",
-  "audience": "developers",
+  "name": "Keyring",
+  "category": "password manager",
+  "valueProp": "stores every login and fills it in on any device",
+  "audience": "anyone with too many accounts",
   "vibe": "clean",
-  "hook": "still hunting through six apps?",
-  "payoff": "one shortcut. everything.",
+  "hook": "resetting your password again?",
+  "payoff": "one place for every login",
   "backgroundQuery": "person typing laptop desk",
-  "stickerQuery": "keyboard"
+  "stickerQuery": "lock"
 }
 
-Input: an app that logs meals from a photo.
+Input: a meal kit that delivers pre-portioned dinner ingredients.
 {
-  "name": "Cal AI",
-  "category": "calorie tracking app",
-  "valueProp": "logs a meal from one photo and gives you the macros",
-  "audience": "people tracking what they eat",
+  "name": "Panfull",
+  "category": "meal kit delivery",
+  "valueProp": "delivers pre-portioned ingredients so dinner takes twenty minutes",
+  "audience": "people who cook after work",
   "vibe": "upbeat",
-  "hook": "no idea what's actually in that?",
-  "payoff": "snap it. macros in seconds.",
-  "backgroundQuery": "person photographing food plate",
-  "stickerQuery": "pizza"
+  "hook": "staring into the fridge again?",
+  "payoff": "dinner sorted in twenty minutes",
+  "backgroundQuery": "person cooking kitchen evening",
+  "stickerQuery": "cooking"
 }
 
-Input: an app that rounds up spare change and invests it.
+Input: an invoicing tool for freelancers that chases late payments.
 {
-  "name": "Acorns",
-  "category": "micro investing app",
-  "valueProp": "rounds up your spare change and invests it automatically",
-  "audience": "people who never started investing",
+  "name": "Ledgerly",
+  "category": "freelance invoicing",
+  "valueProp": "sends your invoices and chases the ones that go unpaid",
+  "audience": "freelancers",
   "vibe": "playful",
-  "hook": "waiting until you have enough to invest?",
-  "payoff": "start with your spare change",
-  "backgroundQuery": "person paying phone cafe",
+  "hook": "still waiting on that invoice?",
+  "payoff": "it chases them so you don't",
+  "backgroundQuery": "person working laptop cafe",
   "stickerQuery": "money"
 }`;
 }

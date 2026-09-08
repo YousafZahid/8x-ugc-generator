@@ -12,8 +12,8 @@
     "check-keys": "tsx scripts/check-keys.ts",
     "scrape": "tsx scripts/scrape-test.ts",
     "brief": "tsx scripts/brief-test.ts",
-    "audio": "tsx scripts/make-audio.ts",
-    "generate": "tsx scripts/generate-test.ts"
+    "generate": "tsx scripts/generate-test.ts",
+    "music": "tsx scripts/fetch-music.ts"
   },
   "dependencies": {
     "cheerio": "1.0.0",

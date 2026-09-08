@@ -19,7 +19,7 @@ what to go looking for — it is the editor, not the camera.
 |---|---|---|
 | 1 | Background video | Pexels (Pixabay as a second library) |
 | 2 | Text overlays | SVG → PNG, two time-gated cards |
-| 3 | Audio | Local royalty-free library, matched to the brief's vibe |
+| 3 | Audio | CC0/CC-BY music library, matched to the brief's vibe |
 | 4 | Animated sticker | Giphy **stickers** — the hero element, sits on top |
 
 Layer 4 uses Giphy's `/stickers` endpoint rather than `/gifs` because stickers
@@ -68,17 +68,18 @@ make the output good, not possible.
 | `npm run brief -- "…"` | Scrape + brief, `--fallback` forces the no-LLM path |
 | `npm run smoke` | Four-layer render against fixtures, no network or keys |
 | `npm run fixtures` | Regenerates `fixtures/` |
-| `npm run audio` | Regenerates the audio library |
+| `npm run music` | Rebuilds the audio library from Openverse + archive.org |
 
 ## Decisions worth explaining
 
-**Audio is synthesised, not downloaded.** "Trending audio" in the TikTok sense
-is not legally or technically available through any API, and anything claiming
-otherwise is scraping that breaks mid-demo. `scripts/make-audio.ts` writes six
-beds, one per vibe, so licensing is unambiguous and there is no runtime
-dependency. To use real music, drop mp3s in `audio/` and add them to
-`audio/manifest.json` — `lib/audio.ts` reads the manifest and never hardcodes
-filenames.
+**Audio is a committed CC0/CC-BY library, not a runtime API call.** "Trending
+audio" in the TikTok sense is not legally available through any API. Instead
+`npm run music` builds the library once from Openverse and archive.org, keeping
+only CC0 and CC-BY (never `nc`, `nd` or `sa` — see [CREDITS.md](CREDITS.md)),
+rejecting anything without a beat in the first second, and normalising every
+track to **-14 LUFS / -1 dBTP**. Where a vibe has several tracks the choice is
+seeded on the product's domain, so the same product is reproducible while
+different products differ.
 
 **Text is SVG, not ffmpeg `drawtext`.** Escaping arbitrary product copy into a
 `filter_complex` is a footgun, drawtext cannot wrap, and it cannot do the

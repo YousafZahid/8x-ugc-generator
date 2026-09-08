@@ -1,50 +1,200 @@
 [
   {
-    "file": "upbeat.mp3",
+    "file": "upbeat-1.mp3",
     "vibe": "upbeat",
-    "title": "Bright Steps",
-    "bpm": 122,
-    "seconds": 16,
-    "source": "synthesised by scripts/make-audio.ts"
+    "title": "AudioLeaf - Happy Tune (Underscore)",
+    "creator": "AudioLeaf",
+    "license": "CC BY 3.0",
+    "source": "https://archive.org/details/jamendo-610235",
+    "provider": "archive.org",
+    "lufs": -14.2,
+    "seconds": 20
   },
   {
-    "file": "chill.mp3",
+    "file": "upbeat-2.mp3",
+    "vibe": "upbeat",
+    "title": "Megis - Office Party Funk 1",
+    "creator": "Megis",
+    "license": "CC BY 3.0",
+    "source": "https://archive.org/details/jamendo-621906",
+    "provider": "archive.org",
+    "lufs": -16.2,
+    "seconds": 20
+  },
+  {
+    "file": "upbeat-3.mp3",
+    "vibe": "upbeat",
+    "title": "Megis - Team Funk 1",
+    "creator": "Megis",
+    "license": "CC BY 3.0",
+    "source": "https://archive.org/details/jamendo-621910",
+    "provider": "archive.org",
+    "lufs": -14.3,
+    "seconds": 20
+  },
+  {
+    "file": "chill-1.mp3",
     "vibe": "chill",
-    "title": "Slow Light",
-    "bpm": 84,
-    "seconds": 16,
-    "source": "synthesised by scripts/make-audio.ts"
+    "title": "Lenny Wiles Lionstar GALAXY BANDSTAND - Quasar Light ( Experience This ) recorded in 1981",
+    "creator": "Lenny Wiles Lionstar GALAXY BANDSTAND",
+    "license": "CC BY 3.0",
+    "source": "https://archive.org/details/jamendo-172704",
+    "provider": "archive.org",
+    "lufs": -15.3,
+    "seconds": 20
   },
   {
-    "file": "hype.mp3",
+    "file": "chill-2.mp3",
+    "vibe": "chill",
+    "title": "Reutsky - lofi fofi",
+    "creator": "Reutsky",
+    "license": "CC BY 3.0",
+    "source": "https://archive.org/details/jamendo-178592",
+    "provider": "archive.org",
+    "lufs": -14.8,
+    "seconds": 20
+  },
+  {
+    "file": "chill-3.mp3",
+    "vibe": "chill",
+    "title": "Z Asmut - Sound images",
+    "creator": "Z Asmut",
+    "license": "CC BY 3.0",
+    "source": "https://archive.org/details/jamendo-130763",
+    "provider": "archive.org",
+    "lufs": -15.1,
+    "seconds": 20
+  },
+  {
+    "file": "hype-1.mp3",
     "vibe": "hype",
-    "title": "Push",
-    "bpm": 140,
-    "seconds": 16,
-    "source": "synthesised by scripts/make-audio.ts"
+    "title": "D-Forest - Dr Livesey Phonk",
+    "creator": "D-Forest",
+    "license": "CC BY 3.0",
+    "source": "https://archive.org/details/jamendo-523891",
+    "provider": "archive.org",
+    "lufs": -15.3,
+    "seconds": 20
   },
   {
-    "file": "playful.mp3",
+    "file": "hype-2.mp3",
+    "vibe": "hype",
+    "title": "Moonwalk - 808s & Cognac (Phonk Hip-Hop Beat)",
+    "creator": "Moonwalk",
+    "license": "CC BY 3.0",
+    "source": "https://archive.org/details/jamendo-525523",
+    "provider": "archive.org",
+    "lufs": -14.3,
+    "seconds": 20
+  },
+  {
+    "file": "hype-3.mp3",
+    "vibe": "hype",
+    "title": "Moonwalk - Tokio Drift (Phonk Hip-Hop Beat)",
+    "creator": "Moonwalk",
+    "license": "CC BY 3.0",
+    "source": "https://archive.org/details/jamendo-525524",
+    "provider": "archive.org",
+    "lufs": -14.6,
+    "seconds": 20
+  },
+  {
+    "file": "playful-1.mp3",
     "vibe": "playful",
-    "title": "Bounce",
-    "bpm": 128,
-    "seconds": 16,
-    "source": "synthesised by scripts/make-audio.ts"
+    "title": "Megis - Funky Inspiration",
+    "creator": "Megis",
+    "license": "CC BY 3.0",
+    "source": "https://archive.org/details/jamendo-621757",
+    "provider": "archive.org",
+    "lufs": -15.6,
+    "seconds": 20
   },
   {
-    "file": "cinematic.mp3",
+    "file": "playful-2.mp3",
+    "vibe": "playful",
+    "title": "CROMA - mil balas",
+    "creator": "CROMA",
+    "license": "CC BY 3.0",
+    "source": "https://archive.org/details/jamendo-233268",
+    "provider": "archive.org",
+    "lufs": -15.6,
+    "seconds": 20
+  },
+  {
+    "file": "playful-3.mp3",
+    "vibe": "playful",
+    "title": "MrJuan - Am I Young ? Am I Old ?",
+    "creator": "MrJuan",
+    "license": "CC BY 2.0",
+    "source": "https://archive.org/details/jamendo-129366",
+    "provider": "archive.org",
+    "lufs": -14.8,
+    "seconds": 20
+  },
+  {
+    "file": "cinematic-1.mp3",
     "vibe": "cinematic",
-    "title": "Wide Open",
-    "bpm": 70,
-    "seconds": 16,
-    "source": "synthesised by scripts/make-audio.ts"
+    "title": "Male Enhancement - Everything And Everyone You've Ever Loved//Will Soon Be Dead",
+    "creator": "Male Enhancement",
+    "license": "CC BY 3.0",
+    "source": "https://archive.org/details/jamendo-125070",
+    "provider": "archive.org",
+    "lufs": -15.1,
+    "seconds": 20
   },
   {
-    "file": "clean.mp3",
+    "file": "cinematic-2.mp3",
+    "vibe": "cinematic",
+    "title": "Chris K. - SILENT SKIES",
+    "creator": "Chris K.",
+    "license": "CC BY 3.0",
+    "source": "https://archive.org/details/jamendo-165169",
+    "provider": "archive.org",
+    "lufs": -13.5,
+    "seconds": 20
+  },
+  {
+    "file": "cinematic-3.mp3",
+    "vibe": "cinematic",
+    "title": "Moonwalk - Orchestra (Classical Instrumental)",
+    "creator": "Moonwalk",
+    "license": "CC BY 3.0",
+    "source": "https://archive.org/details/jamendo-525465",
+    "provider": "archive.org",
+    "lufs": -13.4,
+    "seconds": 20
+  },
+  {
+    "file": "clean-1.mp3",
     "vibe": "clean",
-    "title": "Plain Air",
-    "bpm": 104,
-    "seconds": 16,
-    "source": "synthesised by scripts/make-audio.ts"
+    "title": "Nisiru Remixed EP",
+    "creator": "stroboskop",
+    "license": "CC BY 3.0",
+    "source": "https://archive.org/details/stroboskop-label013",
+    "provider": "archive.org",
+    "lufs": -15,
+    "seconds": 20
+  },
+  {
+    "file": "clean-2.mp3",
+    "vibe": "clean",
+    "title": "[TranZ013] L_cio- Depende EP",
+    "creator": "L_cio",
+    "license": "CC BY 4.0",
+    "source": "https://archive.org/details/tranz013L_cio-DependeEp_421",
+    "provider": "archive.org",
+    "lufs": -14.6,
+    "seconds": 20
+  },
+  {
+    "file": "clean-3.mp3",
+    "vibe": "clean",
+    "title": "Morning Song EP",
+    "creator": "Ivek",
+    "license": "CC BY 3.0",
+    "source": "https://archive.org/details/stroboskop018",
+    "provider": "archive.org",
+    "lufs": -14.8,
+    "seconds": 20
   }
 ]

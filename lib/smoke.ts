@@ -20,6 +20,10 @@ import { promisify } from "node:util";
 import { render, renderConfig, type RenderResult } from "./render";
 import { textCardPng } from "./text";
 import { opaquePixels } from "./media";
+import { pickAudio } from "./audio";
+import { buildBrief } from "./brief";
+import { anyLlmConfigured } from "./llm";
+import { scrape, extractUrl } from "./scrape";
 
 const exec = promisify(execFile);
 
@@ -64,6 +68,54 @@ function stddev(buf: Buffer): number {
  * nothing at all - the checks were green and the video had three layers.
  */
 const FLAT = 12;
+
+/**
+ * Integrated loudness of a rendered file, in LUFS.
+ *
+ * Exists because the first audio library measured -34 LUFS - technically
+ * present, inaudible on a phone. A codec check cannot see that.
+ */
+async function loudness(file: string): Promise<number> {
+  try {
+    const { stderr } = await exec("ffmpeg", [
+      "-hide_banner", "-i", file, "-af", "ebur128=framelog=quiet", "-f", "null", "-",
+    ], { maxBuffer: 16 * 1024 * 1024, encoding: "utf8" });
+    const m = String(stderr).match(/I:\s*(-?[\d.]+) LUFS/);
+    return m ? Number(m[1]) : -99;
+  } catch {
+    return -99;
+  }
+}
+
+/** Anything quieter than this is effectively silent under a phone speaker. */
+const MIN_LUFS = -20;
+
+/**
+ * The four products used for fresh-URL testing. If these collapse onto one
+ * track the audio layer is hardcoded in practice, whatever the code says.
+ */
+const DISTINCT_PROBES = [
+  "I'm launching WHOOP, a fitness wearable - whoop.com",
+  "make an ad for raycast.com",
+  "make an ad for arc.net",
+  "I run Notion Calendar, a scheduling app - cron.com",
+];
+
+async function distinctTracks(): Promise<{ pairs: string[]; distinct: number }> {
+  const pairs: string[] = [];
+  const tracks = new Set<string>();
+
+  for (const message of DISTINCT_PROBES) {
+    const url = extractUrl(message);
+    if (!url) continue;
+    const product = await scrape(url);
+    const { brief } = await buildBrief(product, message);
+    const track = pickAudio(brief.vibe, product.host).path.split("/").pop() ?? "?";
+    tracks.add(track);
+    pairs.push(`${product.host} -> ${brief.vibe} -> ${track}`);
+  }
+  return { pairs, distinct: tracks.size };
+}
 
 export type SmokeCheck = { name: string; pass: boolean; got: string };
 
@@ -112,7 +164,9 @@ export async function runSmoke(outDir?: string): Promise<SmokeReport> {
     {
       background: path.join(FIXTURES, "bg.mp4"),
       sticker: path.join(FIXTURES, "sticker.gif"),
-      audio: path.join(FIXTURES, "audio.mp3"),
+      // The library track, not the fixture tone bed: the loudness assertion
+      // below is only meaningful if it measures what ships.
+      audio: pickAudio("upbeat", "smoke").path,
       textCards: [
         { png: hook, start: 0, end: half },
         { png: payoff, start: half, end: cfg.duration },
@@ -198,6 +252,32 @@ export async function runSmoke(outDir?: string): Promise<SmokeReport> {
       got: `luma sd ${payoffSd.toFixed(1)}`,
     },
   ];
+
+  const lufs = await loudness(result.out);
+  checks.push({
+    name: `layer 3: audio louder than ${MIN_LUFS} LUFS`,
+    pass: lufs > MIN_LUFS,
+    got: `${lufs.toFixed(1)} LUFS`,
+  });
+
+  // Needs the network and a model, so it is skipped offline rather than
+  // failing the whole run. When it does run, collapsing to one track fails.
+  if (anyLlmConfigured() && !process.env.SMOKE_SKIP_LIVE) {
+    try {
+      const { pairs, distinct } = await distinctTracks();
+      checks.push({
+        name: "layer 3: 4 products yield 3+ distinct tracks",
+        pass: distinct >= 3,
+        got: `${distinct} distinct | ${pairs.join(", ")}`,
+      });
+    } catch (e) {
+      checks.push({
+        name: "layer 3: 4 products yield 3+ distinct tracks",
+        pass: false,
+        got: `probe failed: ${e instanceof Error ? e.message : e}`,
+      });
+    }
+  }
 
   return {
     ok: checks.every((c) => c.pass),

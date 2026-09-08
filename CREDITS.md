@@ -25,19 +25,38 @@ per-video credits name the sticker's uploader where GIPHY provides one.
 Uploaders retain rights to their stickers. For anything beyond a demo, obtain a
 production key and follow GIPHY's attribution requirements.
 
-## Audio — original
+## Music — Creative Commons, from Openverse and archive.org
 
-The tracks in `audio/` were **written for this project** by
-`scripts/make-audio.ts`, which synthesises them from scratch. They are not
-sampled from, derived from, or trained on any existing recording, so there is
-no third-party rights holder.
+The tracks in `audio/` are real royalty-free music fetched by
+`scripts/fetch-music.ts` from two keyless APIs:
 
-This is deliberate. Real "trending audio" — the TikTok sense of the phrase — is
-not legally or technically obtainable through any public API. Shipping a
-committed, self-authored library is the honest version of that requirement: it
-never 404s, needs no key, and cannot get the project into a licensing problem.
+- **[Openverse](https://api.openverse.org/)** — indexes CC-licensed audio from
+  Freesound, Jamendo and Wikimedia Commons.
+- **[archive.org](https://archive.org/)** — restricted to the `netlabels`
+  collection and Jamendo mirrors.
 
-To use real licensed music instead, drop mp3s into `audio/` and add them to
+**Only CC0 and CC-BY are accepted.** The filter is deliberately strict:
+
+| Licence | Why it is excluded |
+|---|---|
+| `by-nc` | The output of this app is a marketing video — a commercial use |
+| `by-nd` | Compositing music into a video creates a derivative work |
+| `by-sa` | Share-alike would propagate to the user's finished video |
+
+The "public domain mark" is also excluded. Open archive.org uploads carry
+user-supplied licence metadata that is often wrong — a search for *phonk*
+returns commercial chart music tagged public-domain — which is why only the
+curated collections are queried.
+
+Per-track title, creator, licence and source URL are recorded in
+`audio/manifest.json` and surfaced in the chat under "Credits & how it was
+made". **CC-BY requires attribution**; keep it in place when reusing output.
+
+Pixabay Music was the intended source but is not reachable programmatically:
+their API has no music endpoint (`/api/music/` 404s, `/api/audio/` 403s) and
+the music site returns 403 to scripted requests.
+
+To use different music, drop files into `audio/` and add them to
 `audio/manifest.json` with a matching `vibe`. No code changes needed.
 
 ## Fixtures

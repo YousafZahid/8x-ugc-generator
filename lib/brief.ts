@@ -10,6 +10,7 @@
  * a placeholder: on a free tier it will run for real.
  */
 
+import { availableVibes } from "./audio";
 import { jsonCompletion } from "./llm";
 import { VIBES, type Brief, type Product, type Vibe } from "./types";
 
@@ -17,7 +18,15 @@ import { VIBES, type Brief, type Product, type Vibe } from "./types";
 const HOOK_MAX = 46;
 const PAYOFF_MAX = 52;
 
-const SYSTEM = `You are a short-form video producer who writes UGC-style ads for products.
+/**
+ * Built per call, not at module load, and the vibe list comes from the audio
+ * manifest rather than a hardcoded enum. If the library and the prompt drift
+ * apart, every lookup misses and the same default track plays on every video -
+ * which is exactly what "AI picks the asset" must not mean.
+ */
+function systemPrompt(): string {
+  const vibes = availableVibes();
+  return `You are a short-form video producer who writes UGC-style ads for products.
 
 You will be given whatever could be scraped from a product's website, plus the
 message the user typed. Decide how to advertise it in an 8-second vertical video.
@@ -28,7 +37,7 @@ Return ONLY a JSON object with exactly these keys:
   "category":        what it is, e.g. "calorie tracking app", 2-5 words
   "valueProp":       one plain sentence on what it does for someone. No hype.
   "audience":        who it is for, 2-6 words
-  "vibe":            one of: ${VIBES.join(", ")}
+  "vibe":            EXACTLY one of these, no other value: ${vibes.join(" | ")}
   "hook":            FIRST on-screen text. Max ${HOOK_MAX} characters.
   "payoff":          SECOND on-screen text. Max ${PAYOFF_MAX} characters.
   "backgroundQuery": 2-4 words for a STOCK FOOTAGE search
@@ -44,7 +53,10 @@ Rules that matter:
   "innovation" - stock libraries return garbage for those.
 - stickerQuery must be a concrete object or reaction that a looping sticker
   exists for: "pizza", "fire", "thumbs up", "money". Never a brand name.
-- Write like a person, not a brochure. Lowercase is fine. Be specific.`;
+- Write like a person, not a brochure. Lowercase is fine. Be specific.
+- Pick the vibe that genuinely fits this product's energy. Do not default to
+  the first option; a sleep tracker and a trading app do not share a mood.`;
+}
 
 type RawBrief = Partial<Record<keyof Omit<Brief, "source">, unknown>>;
 
@@ -54,9 +66,28 @@ function str(v: unknown, max: number, fallback = ""): string {
   return (cleaned || fallback).slice(0, max);
 }
 
-function toVibe(v: unknown): Vibe {
+function toVibe(v: unknown, seed: string): Vibe {
   const s = typeof v === "string" ? v.toLowerCase().trim() : "";
-  return (VIBES as readonly string[]).includes(s) ? (s as Vibe) : "upbeat";
+  const usable = availableVibes();
+
+  if ((VIBES as readonly string[]).includes(s)) {
+    const vibe = s as Vibe;
+    // Honour the model even if the library cannot serve that vibe - pickAudio
+    // handles the miss, and the brief should record what was actually chosen.
+    return vibe;
+  }
+
+  // Unusable value. Spreading across the library beats collapsing to one
+  // default, which is what made every video sound identical.
+  if (usable.length) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < seed.length; i++) {
+      h ^= seed.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
+    }
+    return usable[(h >>> 0) % usable.length];
+  }
+  return "upbeat";
 }
 
 /** Strips the boilerplate that clutters most <title> tags. */
@@ -146,7 +177,7 @@ export async function buildBrief(
     .join("\n");
 
   const { data, provider, ms, errors } = await jsonCompletion<RawBrief>({
-    system: SYSTEM,
+    system: systemPrompt(),
     user: context,
     temperature: 0.85,
     maxTokens: 700,
@@ -162,7 +193,7 @@ export async function buildBrief(
     category: str(data.category, 60, fb.category),
     valueProp: str(data.valueProp, 160, fb.valueProp),
     audience: str(data.audience, 60, fb.audience),
-    vibe: toVibe(data.vibe),
+    vibe: toVibe(data.vibe, product.host),
     hook: str(data.hook, HOOK_MAX, fb.hook),
     payoff: str(data.payoff, PAYOFF_MAX, fb.payoff),
     // A model that ignores the "filmable" rule poisons the whole video, so an

@@ -257,7 +257,12 @@ const fixtureSticker = (): Asset => ({
   link: null,
 });
 
-export async function selectAssets(brief: Brief, workDir: string): Promise<AssetReport> {
+export async function selectAssets(
+  brief: Brief,
+  workDir: string,
+  /** Product domain - seeds the track choice so it is stable per product. */
+  seed = ""
+): Promise<AssetReport> {
   const notes: string[] = [];
 
   // Background and sticker are independent lookups - run them together.
@@ -274,7 +279,7 @@ export async function selectAssets(brief: Brief, workDir: string): Promise<Asset
       fixtureSticker())(),
   ]);
 
-  const audio = pickAudio(brief.vibe);
+  const audio = pickAudio(brief.vibe, seed);
 
   return { assets: { background, sticker, audio }, notes };
 }

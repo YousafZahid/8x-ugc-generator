@@ -88,7 +88,7 @@ export async function generate(
       detail: `Finding "${brief.backgroundQuery}" footage and a ${brief.stickerQuery} sticker`,
     });
     const t2 = Date.now();
-    const { assets, notes: assetNotes } = await selectAssets(brief, work);
+    const { assets, notes: assetNotes } = await selectAssets(brief, work, product.host);
     notes.push(...assetNotes);
     const assetsMs = Date.now() - t2;
 

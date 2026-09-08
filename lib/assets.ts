@@ -334,6 +334,13 @@ async function pickSticker(
     }
 
     if (rejectedAlpha) notes.push(`skipped ${rejectedAlpha} sticker(s) with unusable alpha`);
+    // Why this one won, in the notes the chat already surfaces. Without it a
+    // bad pick is unexplainable from the outside - which is how a "Game"
+    // sticker kept beating a chat bubble with no way to see the reason.
+    notes.push(
+      `sticker scored ${c.score} (strong ${c.strong}) on "${c.query}", ` +
+        `beating ${relevant.length - 1} other candidate(s)`
+    );
     // Giphy titles usually read "Heart Heartbeat Sticker by Hands-Only CPR",
     // so appending the username again produced "... by X by X".
     const rawTitle = (c.item.title ?? "").trim();

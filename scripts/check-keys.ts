@@ -70,6 +70,22 @@ const CHECKS: Check[] = [
     },
   },
   {
+    name: "Jamendo",
+    env: "JAMENDO_CLIENT_ID",
+    // Same licence clauses the app itself filters on, so this proves the
+    // exact query shape works, not just that the ID is valid.
+    request: (k) => ({
+      url:
+        `https://api.jamendo.com/v3.0/tracks/?client_id=${k}&format=json&limit=5` +
+        `&fuzzytags=techno&audioformat=mp32&durationbetween=30_600` +
+        `&ccnc=false&ccnd=false&ccsa=false&boost=popularity_month`,
+    }),
+    detail: (b) => {
+      const d = b as { headers?: { status?: string; results_count?: number } };
+      return `${d.headers?.status ?? "?"}, ${d.headers?.results_count ?? 0} CC-BY tracks`;
+    },
+  },
+  {
     name: "Pixabay",
     env: "PIXABAY_API_KEY",
     request: (k) => ({

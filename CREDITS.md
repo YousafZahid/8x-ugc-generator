@@ -25,7 +25,27 @@ per-video credits name the sticker's uploader where GIPHY provides one.
 Uploaders retain rights to their stickers. For anything beyond a demo, obtain a
 production key and follow GIPHY's attribution requirements.
 
-## Music — Creative Commons, from Openverse and archive.org
+## Music — live from Jamendo, falling back to a committed library
+
+Audio is tiered like every other asset layer:
+
+1. **[Jamendo API v3.0](https://developer.jamendo.com/v3.0)** — live search, by
+   vibe, filtered to **CC-BY only** via `ccnc=false&ccnd=false&ccsa=false`.
+   Jamendo's catalogue is mostly `by-nc` / `by-sa` / `by-nd`, none of which we
+   can use, so the filter is doing real work rather than decorating the query.
+2. **The committed `audio/` library** below — the guaranteed floor.
+3. The fixture tone bed, if even that is missing.
+
+Live tracks are trimmed to the window we use and normalised to -14 LUFS so
+they sit at the same level as the committed files. Title, artist, licence and
+the Jamendo track URL are captured into the same credits array as every other
+asset and shown in the chat.
+
+Reads authenticate with `client_id` as a GET parameter. The client secret is
+only for user-scoped OAuth, which this app never performs, and is deliberately
+absent from the code and from `.env.example`.
+
+## The committed library — Creative Commons, from Openverse and archive.org
 
 The tracks in `audio/` are real royalty-free music fetched by
 `scripts/fetch-music.ts` from two keyless APIs:

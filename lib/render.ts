@@ -210,6 +210,10 @@ export function buildArgs(input: RenderInput, cfg = renderConfig()): string[] {
   // Layer 3 - audio: start mid-track, trim to length, ease in, duck out.
   const offset = Math.max(0, input.audioOffset ?? 0);
   const fadeOut = Math.max(0, D - 0.6);
+  // No loudnorm here. In the chain it cost ~1.3s of encode (3.29s vs 1.94s
+  // median), and it would run on the committed library too, which is already
+  // normalised. Live downloads are normalised once in lib/music.ts instead -
+  // off the render path, and only where it is actually needed.
   chains.push(
     `[2:a]atrim=${offset.toFixed(2)}:${(offset + D).toFixed(2)},asetpts=PTS-STARTPTS,` +
       `afade=t=in:st=0:d=0.3,afade=t=out:st=${fadeOut}:d=0.6,` +

@@ -52,10 +52,16 @@ export type Asset = {
   /** Local path on disk once downloaded. */
   path: string;
   /** Where it came from, for CREDITS and the UI. */
-  source: "pexels" | "giphy" | "local" | "fixture";
+  source: "pexels" | "giphy" | "jamendo" | "local" | "fixture";
   credit: string;
   /** Canonical page for the asset, for attribution links. */
   link: string | null;
+  /** Audio only: real length, so the mid-track offset can be bounded. */
+  durationSeconds?: number;
+  /** Audio only: already trimmed to a window, so the renderer starts at 0. */
+  preTrimmed?: boolean;
+  /** Audio only: where in the original track that window begins. */
+  startOffset?: number;
 };
 
 export type AssetSet = {

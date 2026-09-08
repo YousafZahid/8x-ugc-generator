@@ -65,6 +65,7 @@ function toAsset(entry: AudioEntry): Asset {
     source: "local",
     credit: `"${entry.title}" by ${entry.creator} (${entry.license}, via ${entry.provider})`,
     link: entry.source || null,
+    durationSeconds: entry.seconds,
   };
 }
 

@@ -101,14 +101,29 @@ export async function generate(
       detail: `Finding "${brief.backgroundQuery}" footage and a ${brief.stickerQuery} sticker`,
     });
     const t2 = Date.now();
-    const { assets, notes: assetNotes } = await selectAssets(brief, work, product.host);
+    // The track must cover the video plus the mid-track offset we intend to use.
+    const { assets, notes: assetNotes } = await selectAssets(
+      brief,
+      work,
+      product.host,
+      cfg.duration + 14
+    );
     notes.push(...assetNotes);
     const assetsMs = Date.now() - t2;
 
-    // Start the music mid-track. Tracks are 20s and the first bars are usually
-    // an intro with no groove; opening there wastes the only 8 seconds we get.
-    // Seeded on the domain so a product is reproducible.
-    const audioOffset = 6 + (hashSeed(product.host) % 7);
+    // Start the music mid-track: the opening bars are usually an intro with no
+    // groove, and we only get eight seconds. Seeded on the domain, then bounded
+    // against the track's real length rather than assuming the library's 20s -
+    // a live Jamendo track can be any duration.
+    // A live track arrives already cropped to its window, so the renderer
+    // starts at 0; the library files are full length and get the offset here.
+    const trackSeconds = assets.audio.durationSeconds ?? 20;
+    const latestStart = Math.max(0, trackSeconds - cfg.duration - 0.5);
+    const renderOffset = assets.audio.preTrimmed
+      ? 0
+      : +Math.min(6 + (hashSeed(product.host) % 7), latestStart).toFixed(2);
+    // Reported offset is where the music actually starts within the original.
+    const audioOffset = assets.audio.startOffset ?? renderOffset;
 
     // 4. Draw the text, then composite.
     onProgress({ step: "compose", detail: "Compositing four layers with ffmpeg" });
@@ -155,7 +170,7 @@ export async function generate(
           { png: hookPng.png, y: hookPng.y, start: hookStart, end: hookEnd },
           { png: payoffPng.png, y: payoffPng.y, start: payoffStart, end: payoffEnd },
         ],
-        audioOffset,
+        audioOffset: renderOffset,
         layout,
         out,
       },

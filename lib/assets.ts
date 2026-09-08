@@ -12,6 +12,7 @@ import path from "node:path";
 
 import { opaqueFraction } from "./media";
 import { pickAudio } from "./audio";
+import { jamendoTrack } from "./music";
 import type { Asset, AssetSet, Brief } from "./types";
 
 const TIMEOUT_MS = Number(process.env.ASSET_TIMEOUT_MS ?? 15_000);
@@ -302,12 +303,16 @@ export async function selectAssets(
   brief: Brief,
   workDir: string,
   /** Product domain - seeds the track choice so it is stable per product. */
-  seed = ""
+  seed = "",
+  /** Seconds the track must cover: video length plus room to start mid-track. */
+  minAudioSeconds = 20
 ): Promise<AssetReport> {
   const notes: string[] = [];
 
-  // Background and sticker are independent lookups - run them together.
-  const [background, sticker] = await Promise.all([
+  // All three lookups are independent - run them together. Audio was
+  // sequential after the other two, which put the whole Jamendo round trip on
+  // the critical path instead of hiding it behind the Pexels download.
+  const [background, sticker, live] = await Promise.all([
     (async () =>
       (await pexelsBackground(brief.backgroundQuery, workDir, notes)) ??
       (await pixabayBackground(brief.backgroundQuery, workDir, notes)) ??
@@ -341,9 +346,14 @@ export async function selectAssets(
       }
       return fixtureSticker();
     })(),
+    jamendoTrack(brief.vibe, seed, minAudioSeconds, workDir, notes),
   ]);
 
-  const audio = pickAudio(brief.vibe, seed);
+  // Audio is tiered like every other layer: live search, then the committed
+  // library, then the fixture. The library is the guaranteed floor - it is
+  // pre-normalised and always present, so a slow or empty Jamendo never costs
+  // more than freshness.
+  const audio = live ?? pickAudio(brief.vibe, seed);
 
   return { assets: { background, sticker, audio }, notes };
 }

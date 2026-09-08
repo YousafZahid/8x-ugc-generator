@@ -19,7 +19,7 @@ what to go looking for — it is the editor, not the camera.
 |---|---|---|
 | 1 | Background video | Pexels (Pixabay as a second library) |
 | 2 | Text overlays | SVG → PNG, two time-gated cards |
-| 3 | Audio | CC0/CC-BY music library, matched to the brief's vibe |
+| 3 | Audio | Jamendo live search (CC-BY), falling back to a committed library |
 | 4 | Animated sticker | Giphy **stickers** — the hero element, sits on top |
 
 Layer 4 uses Giphy's `/stickers` endpoint rather than `/gifs` because stickers
@@ -35,7 +35,7 @@ footage.
         │
         ├─ lib/scrape.ts    fetch + cheerio → r.jina.ai → domain name
         ├─ lib/brief.ts     LLM writes the copy and picks search terms
-        ├─ lib/assets.ts    Pexels + Giphy + local audio
+        ├─ lib/assets.ts    Pexels + Giphy + Jamendo (all tiered)
         ├─ lib/text.ts      SVG text cards → transparent PNG (sharp)
         └─ lib/render.ts    one ffmpeg filter_complex → mp4
                                     │

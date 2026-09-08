@@ -183,13 +183,90 @@ type GiphyItem = {
  */
 const OPAQUE_BOX = 0.92;
 const EMPTY = 0.02;
+/** Candidates whose alpha we actually download and measure, across all queries. */
+const ALPHA_BUDGET = 8;
 
-async function giphySticker(query: string, workDir: string, notes: string[]): Promise<Asset | null> {
-  const key = process.env.GIPHY_API_KEY;
-  if (!key) {
-    notes.push("no Giphy key - using the fixture sticker");
-    return null;
+const STOPWORDS = new Set([
+  "the","a","an","and","or","for","with","your","you","that","this","its","it",
+  "of","to","in","on","from","by","app","apps","get","gets","give","gives",
+  "make","makes","so","without","into","every","all","one","more","less","is",
+  "are","be","can","when","what","how","who","their","them","use","using",
+]);
+
+function words(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !STOPWORDS.has(w));
+}
+
+/** Giphy's slug carries the uploader's tags: "TELUS-owl-owls-telus-<id>". */
+function slugWords(slug: string): string {
+  return slug.split("-").slice(0, -1).join(" ");
+}
+
+/**
+ * How well a candidate matches the product.
+ *
+ * Alpha validity is not relevance, and taking the first alpha-valid result was
+ * the whole bug: measured across five products, Giphy's rank 0 was usually a
+ * branded promo whose only tag was the uploader's name or the literal word
+ * "transparent", while a genuine match sat several places down. Duolingo
+ * rendered with a head-shaking eagle this way.
+ *
+ * The query terms carry the most weight, then what the product is; the value
+ * proposition is a weak signal and is scored as such.
+ */
+export function relevanceScore(
+  candidate: { title?: string; slug?: string; alt_text?: string },
+  queries: string[],
+  brief: Brief
+): number {
+  return scoreParts(candidate, queries, brief).total;
+}
+
+/**
+ * Split out so the caller can require a strong signal, not just any signal.
+ *
+ * Duolingo picked a "Game Sticker" on a total of 1, earned entirely from the
+ * word "game" appearing in its value proposition, while nothing matched the
+ * actual queries. A value-proposition match is corroboration; on its own it is
+ * close to noise.
+ */
+export function scoreParts(
+  candidate: { title?: string; slug?: string; alt_text?: string },
+  queries: string[],
+  brief: Brief
+): { total: number; strong: number } {
+  const haystack = new Set(
+    words(
+      `${candidate.title ?? ""} ${slugWords(candidate.slug ?? "")} ${candidate.alt_text ?? ""}`
+    )
+  );
+  if (!haystack.size) return { total: 0, strong: 0 };
+
+  let strong = 0;
+  let weak = 0;
+  for (const q of queries) {
+    for (const w of words(q)) if (haystack.has(w)) strong += 4;
   }
+  for (const w of words(brief.category)) if (haystack.has(w)) strong += 2;
+  for (const w of words(brief.valueProp)) if (haystack.has(w)) weak += 1;
+
+  return { total: strong + weak, strong };
+}
+
+type ScoredCandidate = { item: GiphyItem; score: number; strong: number; query: string; rank: number };
+
+/** Fetches one page of stickers and scores every result against the brief. */
+async function giphyCandidates(
+  query: string,
+  brief: Brief,
+  notes: string[]
+): Promise<ScoredCandidate[]> {
+  const key = process.env.GIPHY_API_KEY;
+  if (!key) return [];
 
   try {
     const url =
@@ -198,64 +275,93 @@ async function giphySticker(query: string, workDir: string, notes: string[]): Pr
     const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
     if (!res.ok) {
       notes.push(`Giphy HTTP ${res.status}`);
-      return null;
+      return [];
     }
-
     const body = (await res.json()) as { data?: GiphyItem[] };
-    const items = body.data ?? [];
-    if (!items.length) {
-      notes.push(`Giphy had no stickers for "${query}"`);
-      return null;
-    }
-
-    let rejected = 0;
-    for (const item of items.slice(0, 6)) {
-      const img =
-        item.images?.original ??
-        item.images?.downsized_medium ??
-        item.images?.fixed_height;
-      if (!img?.url) continue;
-
-      const dest = path.join(workDir, "sticker.gif");
-      if (!(await download(img.url, dest))) continue;
-
-      const fraction = await opaqueFraction(dest);
-      if (fraction >= OPAQUE_BOX || fraction <= EMPTY) {
-        rejected++;
-        continue;
-      }
-
-      if (rejected) notes.push(`skipped ${rejected} sticker(s) with unusable alpha`);
-      return {
-        path: dest,
-        source: "giphy",
-        credit: `Sticker${item.username ? ` by ${item.username}` : ""} via GIPHY`,
-        link: item.url ?? null,
-      };
-    }
-
-    notes.push(`all Giphy candidates for "${query}" had unusable alpha`);
-    return null;
+    return (body.data ?? []).map((item, rank) => {
+      const { total, strong } = scoreParts(item, [query], brief);
+      return { item, rank, query, score: total, strong };
+    });
   } catch (e) {
     notes.push(`Giphy error: ${e instanceof Error ? e.message : e}`);
-    return null;
+    return [];
   }
 }
 
 /**
- * Retry term when the brief's own sticker query finds nothing usable.
+ * Picks the best sticker across every candidate query.
  *
- * Previously every failed query retried with the literal "sparkles", so every
- * niche product converged on the same generic sticker. Derived from what the
- * product actually is instead; "sparkles" survives only as the last resort.
+ * Relevance is now a filter in its own right: a score of zero means nothing in
+ * the title or the uploader's tags relates to the product, and those are
+ * rejected outright rather than accepted for having valid alpha. Alpha remains
+ * a hard filter on top.
+ *
+ * Candidates are tried highest-score-first rather than in Giphy's order, and
+ * only a budget of them are downloaded, since measuring alpha costs a fetch.
  */
+async function pickSticker(
+  queries: string[],
+  brief: Brief,
+  workDir: string,
+  notes: string[]
+): Promise<Asset | null> {
+  const pages = await Promise.all(queries.map((q) => giphyCandidates(q, brief, notes)));
+  // Requires a query or category hit. Without that a candidate is only
+  // related to the product by a stray word in its value proposition.
+  const relevant = pages.flat().filter((c) => c.strong > 0);
+
+  if (!relevant.length) {
+    notes.push(`no Giphy sticker matched ${queries.map((q) => `"${q}"`).join(" / ")}`);
+    return null;
+  }
+
+  // Best match first; Giphy's own ranking only breaks ties.
+  relevant.sort((a, b) => b.score - a.score || a.rank - b.rank);
+
+  let rejectedAlpha = 0;
+  for (const c of relevant.slice(0, ALPHA_BUDGET)) {
+    const img =
+      c.item.images?.original ?? c.item.images?.downsized_medium ?? c.item.images?.fixed_height;
+    if (!img?.url) continue;
+
+    const dest = path.join(workDir, "sticker.gif");
+    if (!(await download(img.url, dest))) continue;
+
+    const fraction = await opaqueFraction(dest);
+    if (fraction >= OPAQUE_BOX || fraction <= EMPTY) {
+      rejectedAlpha++;
+      continue;
+    }
+
+    if (rejectedAlpha) notes.push(`skipped ${rejectedAlpha} sticker(s) with unusable alpha`);
+    // Giphy titles usually read "Heart Heartbeat Sticker by Hands-Only CPR",
+    // so appending the username again produced "... by X by X".
+    const rawTitle = (c.item.title ?? "").trim();
+    const named = / by .+$/i.test(rawTitle);
+    const title = rawTitle.replace(/\s*Sticker\s*( by )/i, "$1").replace(/\s*Sticker\s*$/i, "").trim();
+    const credit =
+      (title || "Sticker") +
+      (!named && c.item.username ? ` by ${c.item.username}` : "") +
+      " via GIPHY";
+
+    return { path: dest, source: "giphy", credit, link: c.item.url ?? null };
+  }
+
+  notes.push("every relevant Giphy candidate had unusable alpha");
+  return null;
+}
+
 /**
  * Filler terms. A model that returns one of these has not really chosen - it
  * has reached for decoration - and left alone it makes every product converge
- * on the same sticker from the other direction, before any fallback fires.
+ * on the same sticker.
  */
 const GENERIC_STICKER = /^(sparkles?|stars?|magic|shine|glitter|wow|cool|nice|fun|awesome)$/i;
 
+/**
+ * Retry term derived from what the product actually is, so a failed niche
+ * query does not land every product on the same generic sticker.
+ */
 export function fallbackStickerTerm(brief: Brief): string {
   const haystack = `${brief.category} ${brief.valueProp} ${brief.audience}`.toLowerCase();
   const table: [RegExp, string][] = [
@@ -267,7 +373,7 @@ export function fallbackStickerTerm(brief: Brief): string {
     [/music|audio|podcast|sound|listening/, "music"],
     [/photo|camera|video|design|creative|editing/, "camera"],
     [/game|gaming|player/, "game controller"],
-    [/study|learn|course|education|language|school/, "books"],
+    [/language|translate|study|learn|course|education|school/, "chat bubble"],
     [/shop|store|ecommerce|retail|fashion|clothing/, "shopping"],
     [/code|developer|programming|api|terminal|launcher|dev tool/, "computer"],
     [/calendar|schedul|meeting|productivity|task|note/, "clock"],
@@ -318,35 +424,22 @@ export async function selectAssets(
       (await pixabayBackground(brief.backgroundQuery, workDir, notes)) ??
       fixtureBackground())(),
     (async () => {
-      // A generic term from the model is overridden by one derived from what
-      // the product actually is.
+      // Drop filler terms, add the derived one, then score across all of them
+      // together and take the best overall match.
       const derivedTerm = fallbackStickerTerm(brief);
-      const primary = GENERIC_STICKER.test(brief.stickerQuery.trim())
-        ? derivedTerm
-        : brief.stickerQuery;
-      if (primary !== brief.stickerQuery) {
-        notes.push(`replaced the generic "${brief.stickerQuery}" sticker query with "${primary}"`);
+      const queries = brief.stickerQueries.filter((q) => !GENERIC_STICKER.test(q.trim()));
+      if (queries.length < brief.stickerQueries.length) {
+        notes.push("dropped a filler sticker term from the brief");
       }
+      if (!queries.includes(derivedTerm)) queries.push(derivedTerm);
 
-      const first = await giphySticker(primary, workDir, notes);
-      if (first) return first;
+      const best = await pickSticker(queries, brief, workDir, notes);
+      if (best) return best;
 
-      // Retry on a term derived from the product, then on a generic one.
-      const derived = derivedTerm;
-      if (derived !== primary) {
-        const second = await giphySticker(derived, workDir, notes);
-        if (second) {
-          notes.push(`fell back to a "${derived}" sticker`);
-          return second;
-        }
-      }
-      if (derived !== "sparkles") {
-        const last = await giphySticker("sparkles", workDir, notes);
-        if (last) return last;
-      }
-      return fixtureSticker();
+      // Nothing relevant anywhere: a generic sticker still beats the fixture.
+      return (await pickSticker(["sparkles"], brief, workDir, notes)) ?? fixtureSticker();
     })(),
-    jamendoTrack(brief.vibe, seed, minAudioSeconds, workDir, notes),
+    jamendoTrack(brief.vibe, seed, brief.musicTags, minAudioSeconds, workDir, notes),
   ]);
 
   // Audio is tiered like every other layer: live search, then the committed

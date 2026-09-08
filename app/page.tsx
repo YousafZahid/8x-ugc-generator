@@ -27,6 +27,7 @@ type Msg = {
   videoUrl?: string;
   posterUrl?: string | null;
   credits?: string[];
+  picks?: { background: string; sticker: string; track: string };
   notes?: string[];
   pending?: boolean;
   failed?: boolean;
@@ -103,6 +104,7 @@ export default function Home() {
           videoUrl: string;
           posterUrl: string | null;
           credits: string[];
+          picks?: { background: string; sticker: string; track: string };
           notes: string[];
         };
         patch(msgId, {
@@ -110,6 +112,7 @@ export default function Home() {
           videoUrl: d.videoUrl,
           posterUrl: d.posterUrl,
           credits: d.credits,
+          picks: d.picks,
           notes: d.notes,
           text: "Here's your ad.",
         });
@@ -299,6 +302,22 @@ export default function Home() {
                           Download
                         </a>
                       </div>
+                      {m.picks && (
+                        <ul className="picks">
+                          <li>
+                            <span>footage</span>
+                            {m.picks.background}
+                          </li>
+                          <li>
+                            <span>sticker</span>
+                            {m.picks.sticker}
+                          </li>
+                          <li>
+                            <span>track</span>
+                            {m.picks.track}
+                          </li>
+                        </ul>
+                      )}
                       <p className="expiry">
                         Renders are ephemeral — this link dies when the server restarts.
                       </p>
@@ -677,6 +696,32 @@ export default function Home() {
         }
         .noplay p {
           margin: 0;
+        }
+        .picks {
+          list-style: none;
+          margin: 10px 0 0;
+          padding: 9px 11px;
+          max-width: 264px;
+          background: #101017;
+          border: 1px solid #1f1f29;
+          border-radius: 9px;
+          font-size: 12px;
+          color: #c3c4d4;
+        }
+        .picks li {
+          display: flex;
+          gap: 8px;
+          padding: 2px 0;
+          line-height: 1.4;
+        }
+        .picks span {
+          flex: none;
+          width: 52px;
+          color: #6b6c7d;
+          text-transform: uppercase;
+          font-size: 10px;
+          letter-spacing: 0.07em;
+          padding-top: 2px;
         }
         .expiry {
           font-size: 11.5px;

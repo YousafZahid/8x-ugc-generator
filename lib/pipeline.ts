@@ -32,6 +32,14 @@ export type GenerateResult = {
   assets: AssetSet;
   /** Attribution owed for the stock assets used. */
   credits: string[];
+  /**
+   * Short labels for what was chosen, shown next to the video.
+   *
+   * The picks are the interesting part of the product and the only way a bad
+   * one is debuggable from the outside - buried in a collapsed credits panel,
+   * nobody sees that the sticker is a head-shaking eagle.
+   */
+  picks: { background: string; sticker: string; track: string };
   ms: { scrape: number; brief: number; assets: number; render: number; total: number };
   notes: string[];
 };
@@ -98,7 +106,7 @@ export async function generate(
     // 3. Cast it.
     onProgress({
       step: "assets",
-      detail: `Finding "${brief.backgroundQuery}" footage and a ${brief.stickerQuery} sticker`,
+      detail: `Finding "${brief.backgroundQuery}" footage and a ${brief.stickerQueries[0]} sticker`,
     });
     const t2 = Date.now();
     // The track must cover the video plus the mid-track offset we intend to use.
@@ -187,6 +195,15 @@ export async function generate(
       notes.push(`pruned ${pruned.deleted.length} older render(s) to stay under the disk cap`);
     }
 
+    const shortLabel = (a: { credit: string }) =>
+      a.credit.split(" via ")[0].split(" (")[0].replace(/^Video by /, "").trim();
+
+    const picks = {
+      background: brief.backgroundQuery,
+      sticker: shortLabel(assets.sticker),
+      track: shortLabel(assets.audio),
+    };
+
     const credits = [assets.background, assets.sticker, assets.audio]
       .filter((a) => a.source !== "fixture")
       .map((a) => (a.link ? `${a.credit} (${a.link})` : a.credit));
@@ -206,6 +223,7 @@ export async function generate(
       brief: { ...brief, source: provider ? "llm" : brief.source },
       assets,
       credits,
+      picks,
       notes,
       ms: {
         scrape: scrapeMs,

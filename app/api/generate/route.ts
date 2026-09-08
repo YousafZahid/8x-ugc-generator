@@ -71,6 +71,7 @@ export async function GET(req: Request) {
             track: job.result.assets.audio.path.split("/").pop(),
             brief: job.result.brief,
             credits: job.result.credits,
+            picks: job.result.picks,
             notes: job.result.notes,
             ms: job.result.ms,
           });

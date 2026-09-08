@@ -75,7 +75,7 @@ async function search(tag: string, minDuration: number): Promise<JamendoTrack[]>
   const params = new URLSearchParams({
     client_id: clientId,
     format: "json",
-    limit: "12",
+    limit: "40",
     fuzzytags: tag,
     audioformat: "mp31",
     // Floor well above the video length so a 12-second clip can never win, and
@@ -165,6 +165,8 @@ async function trimAndNormalise(
 export async function jamendoTrack(
   vibe: Vibe,
   seed: string,
+  /** Genre tags the brief chose for this product, tried before the vibe ladder. */
+  briefTags: string[],
   minDuration: number,
   workDir: string,
   notes: string[] = [],
@@ -173,12 +175,19 @@ export async function jamendoTrack(
 ): Promise<Asset | null> {
   if (!process.env.JAMENDO_CLIENT_ID) return null;
 
-  for (const tag of TAGS[vibe] ?? TAGS.upbeat) {
+  // The brief's own genre tags come first: they are chosen from the product's
+  // niche, where the vibe ladder is one of six coarse buckets shared by every
+  // product that happens to land in it. The ladder stays as the fallback.
+  const ladder = [...briefTags.map((t) => t.toLowerCase().trim()).filter(Boolean),
+                  ...(TAGS[vibe] ?? TAGS.upbeat)];
+
+  for (const tag of ladder) {
     const results = await search(tag, minDuration);
     if (!results.length) continue;
 
-    // Seeded across the page so different products get different tracks, and
-    // a couple of neighbours in case the first stream URL fails.
+    // Seeded across a deep page so two products sharing a genre still differ,
+    // and so repeat runs of the whole catalogue do not converge on the same
+    // handful of popular tracks.
     const start = hash(seed) % results.length;
     for (let i = 0; i < Math.min(3, results.length); i++) {
       const track = results[(start + i) % results.length];

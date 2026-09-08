@@ -41,8 +41,20 @@ export type Brief = {
   payoff: string;
   /** Search terms for Pexels. Concrete and filmable, not abstract. */
   backgroundQuery: string;
-  /** Search term for Giphy stickers. One or two words works best. */
-  stickerQuery: string;
+  /**
+   * Two or three music genre tags for this specific product and ad, best
+   * first. Vibe is a coarse bucket - six of them cannot tell a fintech ad from
+   * a skincare ad - so the model names the genre directly.
+   */
+  musicTags: string[];
+  /**
+   * Two or three ranked sticker search terms, best first.
+   *
+   * A list rather than one string because a single bad word used to sink the
+   * whole layer: there was no second chance and no way to compare across
+   * options.
+   */
+  stickerQueries: string[];
   /** Where the brief came from, so the UI can be honest about it. */
   source: "llm" | "fallback";
 };

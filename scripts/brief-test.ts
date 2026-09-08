@@ -48,7 +48,7 @@ async function main() {
     console.log(`    HOOK        "${brief.hook}"  (${brief.hook.length} chars)`);
     console.log(`    PAYOFF      "${brief.payoff}"  (${brief.payoff.length} chars)`);
     console.log(`    background  ${brief.backgroundQuery}`);
-    console.log(`    sticker     ${brief.stickerQuery}`);
+    console.log(`    stickers    ${brief.stickerQueries.join(" / ")}`);
     if (errors.length) console.log(`    errors      ${errors.join(" | ").slice(0, 240)}`);
   }
   console.log("");

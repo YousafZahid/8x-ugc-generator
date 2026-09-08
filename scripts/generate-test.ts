@@ -29,7 +29,7 @@ async function main() {
   console.log(`    hook        "${r.brief.hook}"`);
   console.log(`    payoff      "${r.brief.payoff}"`);
   console.log(`    background  ${r.brief.backgroundQuery}`);
-  console.log(`    sticker     ${r.brief.stickerQuery}`);
+  console.log(`    stickers    ${r.brief.stickerQueries.join(" / ")}`);
 
   console.log(`\n  ASSETS`);
   console.log(`    background  [${r.assets.background.source}] ${r.assets.background.credit}`);

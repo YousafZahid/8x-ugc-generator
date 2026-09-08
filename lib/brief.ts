@@ -45,7 +45,8 @@ Input: a subscription that ships running shoes twice a year.
   "hook": "running on shoes from two years ago?",
   "payoff": "fresh pair, every season",
   "backgroundQuery": "person running city street",
-  "stickerQuery": "running shoe"
+  "musicTags": ["phonk", "trap", "hiphop"],
+  "stickerQueries": ["running shoe", "fire", "timer"]
 }
 
 Input: a password manager that fills logins across devices.
@@ -58,7 +59,8 @@ Input: a password manager that fills logins across devices.
   "hook": "resetting your password again?",
   "payoff": "one place for every login",
   "backgroundQuery": "person typing laptop desk",
-  "stickerQuery": "lock"
+  "musicTags": ["minimal", "techno", "ambient"],
+  "stickerQueries": ["lock", "shield", "checkmark"]
 }
 
 Input: a meal kit that delivers pre-portioned dinner ingredients.
@@ -71,7 +73,8 @@ Input: a meal kit that delivers pre-portioned dinner ingredients.
   "hook": "staring into the fridge again?",
   "payoff": "dinner sorted in twenty minutes",
   "backgroundQuery": "person cooking kitchen evening",
-  "stickerQuery": "cooking"
+  "musicTags": ["funk", "soul", "indie"],
+  "stickerQueries": ["cooking", "timer", "chef"]
 }
 
 Input: an invoicing tool for freelancers that chases late payments.
@@ -84,7 +87,8 @@ Input: an invoicing tool for freelancers that chases late payments.
   "hook": "still waiting on that invoice?",
   "payoff": "it chases them so you don't",
   "backgroundQuery": "person working laptop cafe",
-  "stickerQuery": "money"
+  "musicTags": ["lofi", "chillout", "jazz"],
+  "stickerQueries": ["money", "invoice", "checkmark"]
 }`;
 }
 
@@ -105,7 +109,8 @@ Return ONLY a JSON object with exactly these keys:
   "hook":            FIRST on-screen text. Max ${HOOK_MAX} characters.
   "payoff":          SECOND on-screen text. Max ${PAYOFF_MAX} characters.
   "backgroundQuery": 2-4 words for a STOCK FOOTAGE search
-  "stickerQuery":    1-2 words for an animated STICKER search
+  "musicTags":       ARRAY of 2-3 music GENRE tags for this ad, best first
+  "stickerQueries":  ARRAY of 2-3 sticker search terms, best first
 }
 
 Rules that matter:
@@ -115,8 +120,17 @@ Rules that matter:
 - backgroundQuery must describe something a camera can film: "person cooking
   breakfast", "city street night". Never abstractions like "productivity" or
   "innovation" - stock libraries return garbage for those.
-- stickerQuery must be a concrete object or reaction that a looping sticker
-  exists for: "pizza", "fire", "thumbs up", "money". Never a brand name.
+- musicTags name the genre that should play under THIS ad, judged from the
+  product's niche and audience. Use real genre words a music library indexes:
+  lofi, chillout, ambient, hiphop, trap, phonk, drumnbass, house, techno,
+  minimal, synthwave, funk, soul, jazz, indie, rock, pop, cinematic,
+  orchestral, acoustic. A recovery wearable is not the same as a meal kit.
+  Do not name artists or songs.
+- stickerQueries must convey what the product DOES, readable in half a second.
+  Not the brand's mascot and not a literal noun from its name. A language app
+  is "chat bubble", "globe", "waving hello", "flag" - not "owl". A password
+  manager is "lock". Others that work: fire, money, timer, checkmark, muscle,
+  rocket. Never a brand name. Give 2-3 so there is a fallback.
 - Write like a person, not a brochure. Lowercase is fine. Be specific.
 - Pick the vibe that genuinely fits this product's energy. Do not default to
   the first option; a sleep tracker and a trading app do not share a mood.
@@ -129,6 +143,16 @@ function str(v: unknown, max: number, fallback = ""): string {
   if (typeof v !== "string") return fallback;
   const cleaned = v.trim().replace(/^["']|["']$/g, "").replace(/\s+/g, " ");
   return (cleaned || fallback).slice(0, max);
+}
+
+/** Accepts an array, or a single string from a model that ignored the schema. */
+function toQueries(v: unknown, fallback: string[]): string[] {
+  const raw = Array.isArray(v) ? v : typeof v === "string" ? [v] : [];
+  const cleaned = raw
+    .map((x) => (typeof x === "string" ? x.trim().replace(/^["']|["']$/g, "") : ""))
+    .filter((x) => x.length > 1 && x.length <= 30)
+    .slice(0, 3);
+  return cleaned.length ? cleaned : fallback;
 }
 
 function toVibe(v: unknown, seed: string): Vibe {
@@ -220,7 +244,8 @@ export function fallbackBrief(product: Product, message: string): Brief {
     hook: str(sentence, HOOK_MAX) || `you need to see this`,
     payoff: `${name} — try it today`.slice(0, PAYOFF_MAX),
     backgroundQuery,
-    stickerQuery,
+    stickerQueries: [stickerQuery, "sparkles"],
+    musicTags: [],
     source: "fallback",
   };
 }
@@ -264,7 +289,8 @@ export async function buildBrief(
     // A model that ignores the "filmable" rule poisons the whole video, so an
     // empty or abstract query falls back rather than reaching Pexels.
     backgroundQuery: str(data.backgroundQuery, 60, fb.backgroundQuery),
-    stickerQuery: str(data.stickerQuery, 30, fb.stickerQuery),
+    stickerQueries: toQueries(data.stickerQueries, fb.stickerQueries),
+    musicTags: toQueries(data.musicTags, fb.musicTags),
     source: "llm",
   };
 

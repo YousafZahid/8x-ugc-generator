@@ -92,7 +92,7 @@ Input: an invoicing tool for freelancers that chases late payments.
 }`;
 }
 
-function systemPrompt(): string {
+export function systemPrompt(): string {
   const vibes = availableVibes();
   return `You are a short-form video producer who writes UGC-style ads for products.
 
@@ -117,15 +117,20 @@ Rules that matter:
 - The hook must stop a thumb. Speak to the problem, not the product. No brand
   name in the hook. No hashtags, no emoji, no quotation marks.
 - The payoff names the product or the action. It is the reason to care.
-- backgroundQueries must film the product's SUBJECT, not someone using a
-  computer. A property marketplace shows houses and neighbourhoods. A recipe
-  app shows food being cooked. A running app shows someone running. Default to
-  a person at a laptop ONLY when the product genuinely has no visual subject,
-  and even then put the subject first and the laptop shot second.
+- backgroundQueries must film the MOMENT THE HOOK DESCRIBES. The footage and
+  the hook are on screen together, so they have to be about the same thing.
+  If the hook is a frustration that happens on a screen ("tired of scrolling
+  duplicate listings?"), film that screen moment - someone scrolling listings
+  on a laptop. If the hook is about the thing itself ("still renting?"), film
+  the thing - houses, a neighbourhood.
+- Whichever you choose, the clip must contain the product's own subject
+  matter. "Person at a laptop" on its own is generic stock filler that could
+  sit under any product; "person scrolling property listings on a laptop"
+  is specific and is fine. Name the subject in the query either way.
 - Order them specific to broad, because a stock library may hold nothing for
-  the narrow one: ["modern house exterior", "real estate neighbourhood",
-  "person browsing laptop"]. Each must be something a camera can film - never
-  abstractions like "productivity" or "innovation".
+  the narrow one: ["person scrolling property listings laptop",
+  "modern house exterior", "real estate neighbourhood"]. Each must be
+  something a camera can film - never abstractions like "productivity".
 - musicTags name the genre that should play under THIS ad, judged from the
   product's niche and audience. Use real genre words a music library indexes:
   lofi, chillout, ambient, hiphop, trap, phonk, drumnbass, house, techno,
@@ -151,12 +156,20 @@ function str(v: unknown, max: number, fallback = ""): string {
   return (cleaned || fallback).slice(0, max);
 }
 
-/** Accepts an array, or a single string from a model that ignored the schema. */
-function toQueries(v: unknown, fallback: string[]): string[] {
+/**
+ * Accepts an array, or a single string from a model that ignored the schema.
+ *
+ * maxLen is a parameter because this is shared by three fields with very
+ * different shapes. It was fixed at 30, which suits a one-or-two-word sticker
+ * term and silently discarded EVERY background query - "person scrolling
+ * property listings laptop" is 42 characters - so footage fell back to the
+ * heuristic theme table on every single render.
+ */
+function toQueries(v: unknown, fallback: string[], maxLen = 30): string[] {
   const raw = Array.isArray(v) ? v : typeof v === "string" ? [v] : [];
   const cleaned = raw
     .map((x) => (typeof x === "string" ? x.trim().replace(/^["']|["']$/g, "") : ""))
-    .filter((x) => x.length > 1 && x.length <= 30)
+    .filter((x) => x.length > 1 && x.length <= maxLen)
     .slice(0, 3);
   return cleaned.length ? cleaned : fallback;
 }
@@ -216,19 +229,22 @@ export function fallbackBrief(product: Product, message: string): Brief {
   // Pull a filmable noun out of what we know, or fall back to something
   // universally safe that still looks like real footage.
   const haystack = `${message} ${product.title} ${product.description}`.toLowerCase();
+  // Word-bounded. Unanchored, /eat/ matched "Create" in the user's own
+  // message and sent a property marketplace to food footage, and /game/
+  // matched "playing a game" in Duolingo's meta description.
   const themes: [RegExp, string, string][] = [
-    [/calorie|diet|nutrition|food|meal|recipe|eat/, "healthy food flat lay", "food"],
-    [/fitness|workout|gym|run|training/, "person working out gym", "muscle"],
-    [/travel|flight|hotel|trip/, "airplane window view", "airplane"],
-    [/finance|money|invest|bank|budget|crypto/, "person using phone cafe", "money"],
-    [/music|audio|podcast|sound/, "person wearing headphones", "music"],
-    [/photo|camera|video|design|creative/, "creative desk setup", "camera"],
-    [/game|gaming|play/, "gaming setup neon", "game controller"],
-    [/study|learn|course|education|language/, "student studying laptop", "books"],
-    [/shop|store|ecommerce|retail|fashion|clothing/, "shopping bags street", "shopping"],
-    [/code|developer|software|api|dev tool/, "laptop screen code", "computer"],
-    [/pet|dog|cat/, "dog running park", "dog"],
-    [/sleep|calm|meditat|wellness|mental/, "calm morning bedroom", "sleep"],
+    [/\b(calorie|diet|nutrition|food|meal|recipe|eating)\b/, "healthy food flat lay", "food"],
+    [/\b(fitness|workout|gym|running|training)\b/, "person working out gym", "muscle"],
+    [/\b(travel|flight|hotel|trip)\b/, "airplane window view", "airplane"],
+    [/\b(finance|money|invest|investing|bank|budget|crypto)\b/, "person using phone cafe", "money"],
+    [/\b(music|audio|podcast|sound)\b/, "person wearing headphones", "music"],
+    [/\b(photo|camera|video|design|creative)\b/, "creative desk setup", "camera"],
+    [/\b(videogame|gaming|esports)\b/, "gaming setup neon", "game controller"],
+    [/\b(study|learn|learning|course|education|language)\b/, "student studying laptop", "books"],
+    [/\b(shop|store|ecommerce|retail|fashion|clothing)\b/, "shopping bags street", "shopping"],
+    [/\b(code|developer|software|api)\b/, "laptop screen code", "computer"],
+    [/\b(pet|dog|cat)\b/, "dog running park", "dog"],
+    [/\b(sleep|calm|meditation|wellness|mental)\b/, "calm morning bedroom", "sleep"],
   ];
 
   let backgroundQuery = "person using phone";
@@ -303,7 +319,7 @@ export async function buildBrief(
     payoff: str(data.payoff, PAYOFF_MAX, fb.payoff),
     // A model that ignores the "filmable" rule poisons the whole video, so an
     // empty or abstract query falls back rather than reaching Pexels.
-    backgroundQueries: toQueries(data.backgroundQueries, fb.backgroundQueries),
+    backgroundQueries: toQueries(data.backgroundQueries, fb.backgroundQueries, 80),
     stickerQueries: toQueries(data.stickerQueries, fb.stickerQueries),
     musicTags: toQueries(data.musicTags, fb.musicTags),
     source: "llm",

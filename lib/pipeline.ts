@@ -114,7 +114,7 @@ export async function generate(
     onProgress({ step: "compose", detail: "Compositing four layers with ffmpeg" });
     const t3 = Date.now();
 
-    const layout = layoutFor(brief.vibe);
+    const layout = layoutFor(brief.vibe, product.host);
     const D = cfg.duration;
 
     // Not a straight split. The hook lands almost immediately, holds, then

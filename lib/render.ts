@@ -55,14 +55,28 @@ export const LAYOUTS: Layout[] = [
   { name: "offset-low", textTop: 0.13, stickerCx: 0.35, stickerCy: 0.74, stickerScale: 0.46 },
 ];
 
-/** Vibe decides the layout, so the pairing is stable and intentional. */
-export function layoutFor(vibe: string): Layout {
+/**
+ * Vibe sets the starting preset; the domain rotates from there.
+ *
+ * Vibe alone was not enough. The model frequently assigns the same vibe to
+ * several products - three of four fresh URLs came back "clean" - which put
+ * three of four videos on an identical layout, which is the "four fills of one
+ * template" problem this is meant to solve. Rotating by domain keeps the vibe
+ * association while guaranteeing same-vibe products differ.
+ */
+export function layoutFor(vibe: string, seed = ""): Layout {
   const byVibe: Record<string, number> = {
     chill: 0, clean: 0,
     upbeat: 1, playful: 1,
     hype: 2, cinematic: 2,
   };
-  return LAYOUTS[byVibe[vibe] ?? 0];
+  let h = 0x811c9dc5;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  const base = byVibe[vibe] ?? 0;
+  return LAYOUTS[(base + (h >>> 0)) % LAYOUTS.length];
 }
 
 export type RenderInput = {

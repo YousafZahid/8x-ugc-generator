@@ -249,7 +249,14 @@ export function scoreParts(
   let strong = 0;
   let weak = 0;
   for (const q of queries) {
-    for (const w of words(q)) if (haystack.has(w)) strong += 4;
+    // Averaged over the query's own words. Summing them made a two-word term
+    // worth double a one-word term for no better reason than its length -
+    // which is how the derived "game controller" outscored "chat bubble".
+    const qw = words(q);
+    if (qw.length) {
+      const hits = qw.filter((w) => haystack.has(w)).length;
+      strong += (hits / qw.length) * 4;
+    }
   }
   for (const w of words(brief.category)) if (haystack.has(w)) strong += 2;
   for (const w of words(brief.valueProp)) if (haystack.has(w)) weak += 1;
@@ -370,8 +377,14 @@ const GENERIC_STICKER = /^(sparkles?|stars?|magic|shine|glitter|wow|cool|nice|fu
  * query does not land every product on the same generic sticker.
  */
 export function fallbackStickerTerm(brief: Brief): string {
-  const haystack = `${brief.category} ${brief.valueProp} ${brief.audience}`.toLowerCase();
+  // Category and audience only. valueProp used to be in here, and it is a
+  // description of HOW a product works, not what it is: Duolingo's "short
+  // game-like lessons" classified a language app as gaming.
+  const haystack = `${brief.category} ${brief.audience}`.toLowerCase();
   const table: [RegExp, string][] = [
+    // Ordered. The first match wins, so specific categories precede the
+    // generic ones they might otherwise be swallowed by.
+    [/language|translat|vocabulary|fluency/, "chat bubble"],
     [/calorie|nutrition|meal|food|recipe|diet|restaurant/, "food"],
     [/fitness|workout|gym|training|running|wearable|recovery/, "muscle"],
     [/sleep|calm|meditat|wellness|mental|mindful/, "sleep"],
@@ -379,8 +392,8 @@ export function fallbackStickerTerm(brief: Brief): string {
     [/travel|flight|hotel|trip|booking/, "airplane"],
     [/music|audio|podcast|sound|listening/, "music"],
     [/photo|camera|video|design|creative|editing/, "camera"],
-    [/game|gaming|player/, "game controller"],
-    [/language|translate|study|learn|course|education|school/, "chat bubble"],
+    [/study|learn|course|education|school|tutor/, "books"],
+    [/video game|gaming|esports|game studio/, "game controller"],
     [/shop|store|ecommerce|retail|fashion|clothing/, "shopping"],
     [/code|developer|programming|api|terminal|launcher|dev tool/, "computer"],
     [/calendar|schedul|meeting|productivity|task|note/, "clock"],
@@ -433,15 +446,28 @@ export async function selectAssets(
     (async () => {
       // Drop filler terms, add the derived one, then score across all of them
       // together and take the best overall match.
-      const derivedTerm = fallbackStickerTerm(brief);
       const queries = brief.stickerQueries.filter((q) => !GENERIC_STICKER.test(q.trim()));
       if (queries.length < brief.stickerQueries.length) {
         notes.push("dropped a filler sticker term from the brief");
       }
-      if (!queries.includes(derivedTerm)) queries.push(derivedTerm);
 
-      const best = await pickSticker(queries, brief, workDir, notes);
+      // The model's own ranked terms, on their own, first.
+      //
+      // The derived term used to be appended here as a peer and could beat
+      // them: for Duolingo it injected "game controller", which won and put a
+      // games console on a language-learning ad. It is a fallback, so it now
+      // behaves like one.
+      const best = queries.length
+        ? await pickSticker(queries, brief, workDir, notes)
+        : null;
       if (best) return best;
+
+      const derivedTerm = fallbackStickerTerm(brief);
+      const derived = await pickSticker([derivedTerm], brief, workDir, notes);
+      if (derived) {
+        notes.push(`fell back to a "${derivedTerm}" sticker`);
+        return derived;
+      }
 
       // Nothing relevant anywhere: a generic sticker still beats the fixture.
       return (await pickSticker(["sparkles"], brief, workDir, notes)) ?? fixtureSticker();

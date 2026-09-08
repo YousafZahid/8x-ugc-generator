@@ -51,7 +51,32 @@ type JamendoTrack = {
   audio?: string;
   shareurl?: string;
   license_ccurl?: string;
+  musicinfo?: { tags?: { genres?: string[]; instruments?: string[]; vartags?: string[] } };
 };
+
+/**
+ * How well a track fits the brief.
+ *
+ * Selection used to be `hash(domain) % results.length` and nothing else - a
+ * seeded coin flip across forty tracks, with no notion of whether any of them
+ * suited the product. That is why the audio kept landing on full vocal songs
+ * like "A Love Song" under a language-learning ad.
+ */
+function scoreTrack(track: JamendoTrack, wanted: string[]): number {
+  const genres = track.musicinfo?.tags?.genres ?? [];
+  const vartags = track.musicinfo?.tags?.vartags ?? [];
+  const hay = new Set([...genres, ...vartags].map((t) => t.toLowerCase()));
+  const name = (track.name ?? "").toLowerCase();
+
+  let score = 0;
+  for (const w of wanted) {
+    const t = w.toLowerCase().trim();
+    if (hay.has(t)) score += 3;
+  }
+  // An explicit instrumental version is the ideal bed.
+  if (/instrumental/.test(name)) score += 2;
+  return score;
+}
 
 /** FNV-1a, matching the other seeded choices so a domain is stable everywhere. */
 function hash(s: string): number {
@@ -68,7 +93,11 @@ function licenceName(url: string | undefined): string {
   return m ? `CC ${m[1].toUpperCase()} ${m[2]}` : "CC BY";
 }
 
-async function search(tag: string, minDuration: number): Promise<JamendoTrack[]> {
+async function search(
+  tag: string,
+  minDuration: number,
+  instrumentalOnly: boolean
+): Promise<JamendoTrack[]> {
   const clientId = process.env.JAMENDO_CLIENT_ID;
   if (!clientId) return [];
 
@@ -85,7 +114,11 @@ async function search(tag: string, minDuration: number): Promise<JamendoTrack[]>
     ccnd: "false",
     ccsa: "false",
     boost: "popularity_month",
-    include: "licenses",
+    include: "licenses musicinfo",
+    // Instrumental first. A track with a lead vocal competes with the
+    // on-screen copy for attention across eight seconds; ad beds are
+    // instrumental for a reason. Retried without this when it returns nothing.
+    ...(instrumentalOnly ? { vocalinstrumental: "instrumental" } : {}),
   });
 
   try {
@@ -182,15 +215,23 @@ export async function jamendoTrack(
                   ...(TAGS[vibe] ?? TAGS.upbeat)];
 
   for (const tag of ladder) {
-    const results = await search(tag, minDuration);
+    // Jamendo's filtered pages are sparse and vary between calls, so an empty
+    // instrumental page does not mean the tag is unusable.
+    let results = await search(tag, minDuration, true);
+    if (!results.length) results = await search(tag, minDuration, false);
     if (!results.length) continue;
 
-    // Seeded across a deep page so two products sharing a genre still differ,
-    // and so repeat runs of the whole catalogue do not converge on the same
-    // handful of popular tracks.
-    const start = hash(seed) % results.length;
-    for (let i = 0; i < Math.min(3, results.length); i++) {
-      const track = results[(start + i) % results.length];
+    // Rank by fit, then seed within the strongest handful. Ranking alone would
+    // give every product in a genre the same track; seeding alone was what
+    // produced a random pick out of forty.
+    const ranked = results
+      .map((t) => ({ t, score: scoreTrack(t, [tag, ...briefTags]) }))
+      .sort((a, b) => b.score - a.score);
+    const pool = ranked.slice(0, Math.min(8, ranked.length)).map((r) => r.t);
+
+    const start = hash(seed) % pool.length;
+    for (let i = 0; i < Math.min(3, pool.length); i++) {
+      const track = pool[(start + i) % pool.length];
       const dest = path.join(workDir, "music.mp3");
       if (!(await download(track.audio as string, dest))) continue;
 

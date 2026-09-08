@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "fixtures": "tsx scripts/make-fixtures.ts",
     "check-keys": "tsx scripts/check-keys.ts",
-    "scrape": "tsx scripts/scrape-test.ts"
+    "scrape": "tsx scripts/scrape-test.ts",
+    "brief": "tsx scripts/brief-test.ts"
   },
   "dependencies": {
     "cheerio": "1.0.0",

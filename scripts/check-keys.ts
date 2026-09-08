@@ -10,26 +10,7 @@
  * against the free-tier quotas that the whole project depends on.
  */
 
-import { readFileSync } from "node:fs";
-import path from "node:path";
-
-/** Minimal .env.local reader - no dependency, no surprises about precedence. */
-function loadEnv(file = ".env.local"): void {
-  try {
-    const text = readFileSync(path.join(process.cwd(), file), "utf8");
-    for (const raw of text.split("\n")) {
-      const line = raw.trim();
-      if (!line || line.startsWith("#")) continue;
-      const eq = line.indexOf("=");
-      if (eq === -1) continue;
-      const key = line.slice(0, eq).trim();
-      const value = line.slice(eq + 1).trim();
-      if (key && !(key in process.env)) process.env[key] = value;
-    }
-  } catch {
-    // No .env.local is a legitimate state - the checks below will say so.
-  }
-}
+import { loadEnvLocal } from "../lib/env";
 
 type Check = {
   name: string;
@@ -155,7 +136,7 @@ async function run(check: Check): Promise<boolean> {
 }
 
 async function main() {
-  loadEnv();
+  loadEnvLocal();
   console.log("\n  Live key check - one minimal request per service\n");
 
   const results: { name: string; ok: boolean }[] = [];

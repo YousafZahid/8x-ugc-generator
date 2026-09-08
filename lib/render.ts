@@ -22,7 +22,48 @@ export type TextCard = {
   png: string;
   start: number;
   end: number;
+  /** Y offset of the block within the frame. Cards are block-sized, not full-frame. */
+  y: number;
 };
+
+/**
+ * Where the text block and the sticker sit. Picked per vibe so four videos do
+ * not read as four fills of one template. Values are fractions of the frame.
+ */
+export type Layout = {
+  name: string;
+  /** Top of the text block. */
+  textTop: number;
+  /** Sticker centre. */
+  stickerCx: number;
+  stickerCy: number;
+  /** Sticker width as a fraction of frame width. */
+  stickerScale: number;
+};
+
+/**
+ * Three presets, deliberately not more. Each keeps the sticker clear of the
+ * text block vertically, and inside a safe margin horizontally.
+ *
+ *   centre-low  text high, sticker large and centred below it
+ *   corner-high sticker small in the upper right, text sitting under it
+ *   offset-low  text high, sticker left of centre and low
+ */
+export const LAYOUTS: Layout[] = [
+  { name: "centre-low", textTop: 0.15, stickerCx: 0.5, stickerCy: 0.63, stickerScale: 0.56 },
+  { name: "corner-high", textTop: 0.34, stickerCx: 0.7, stickerCy: 0.15, stickerScale: 0.34 },
+  { name: "offset-low", textTop: 0.13, stickerCx: 0.35, stickerCy: 0.74, stickerScale: 0.46 },
+];
+
+/** Vibe decides the layout, so the pairing is stable and intentional. */
+export function layoutFor(vibe: string): Layout {
+  const byVibe: Record<string, number> = {
+    chill: 0, clean: 0,
+    upbeat: 1, playful: 1,
+    hype: 2, cinematic: 2,
+  };
+  return LAYOUTS[byVibe[vibe] ?? 0];
+}
 
 export type RenderInput = {
   /** Stock clip (.mp4/.webm) or still photo (.jpg/.png). Both are handled. */
@@ -33,6 +74,15 @@ export type RenderInput = {
   audio: string;
   /** Usually two: a hook card and a payoff card. */
   textCards: TextCard[];
+  /**
+   * Seconds into the track to start.
+   *
+   * Every video used to open at 0:00, which on most tracks is the intro -
+   * no beat, no groove. Starting mid-track opens on an established rhythm.
+   */
+  audioOffset?: number;
+  /** Defaults to the first preset. */
+  layout?: Layout;
   /** Absolute path to write the .mp4 to. */
   out: string;
 };
@@ -66,10 +116,8 @@ export function renderConfig() {
     preset: process.env.VIDEO_PRESET ?? "veryfast",
     fps: Number(process.env.VIDEO_FPS ?? 30),
     crf: Number(process.env.VIDEO_CRF ?? 23),
-    /** Sticker occupies this fraction of frame width. It should dominate. */
-    stickerScale: Number(process.env.STICKER_SCALE ?? 0.58),
-    /** Sticker centre, as a fraction of frame height. Below the text, above the fold. */
-    stickerY: Number(process.env.STICKER_Y ?? 0.6),
+    /** Alpha fade on each text card, seconds in and out. */
+    textFade: Number(process.env.TEXT_FADE ?? 0.22),
     ffmpeg: process.env.FFMPEG_PATH ?? "ffmpeg",
     threads: Number(process.env.FFMPEG_THREADS ?? 2),
   };
@@ -80,6 +128,8 @@ const STILL = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 export function buildArgs(input: RenderInput, cfg = renderConfig()): string[] {
   const { width: W, height: H, duration: D, fps, preset, crf } = cfg;
   const stillBg = STILL.has(path.extname(input.background).toLowerCase());
+  const layout = input.layout ?? LAYOUTS[0];
+  const fade = cfg.textFade;
 
   const args: string[] = ["-y", "-hide_banner", "-loglevel", "error", "-threads", String(cfg.threads)];
 
@@ -93,10 +143,13 @@ export function buildArgs(input: RenderInput, cfg = renderConfig()): string[] {
   // 2: audio.
   args.push("-i", input.audio);
 
-  // 3..n: one input per text card.
-  for (const card of input.textCards) args.push("-i", card.png);
+  // 3..n: text cards. Each is looped for exactly its own window, so the fade
+  // filter has a timeline to work against - a single still frame has none.
+  for (const card of input.textCards) {
+    args.push("-loop", "1", "-t", String(Math.max(0.1, card.end - card.start)), "-i", card.png);
+  }
 
-  const stickerW = Math.round((W * cfg.stickerScale) / 2) * 2;
+  const stickerW = Math.round((W * layout.stickerScale) / 2) * 2;
   const chains: string[] = [];
 
   // Layer 1 - cover-crop the background to exactly WxH, normalise timing.
@@ -110,14 +163,24 @@ export function buildArgs(input: RenderInput, cfg = renderConfig()): string[] {
       `crop=${W}:${H},fps=${fps},setsar=1,setpts=PTS-STARTPTS[bg]`
   );
 
-  // Layer 2 - text cards, each gated to its own window. Cards are authored at
-  // exactly WxH by lib/text.ts, so no scale filter is inserted.
+  // Layer 2 - text cards. Alpha-faded in and out rather than hard-cut: a
+  // straight enable= switch reads as a slideshow, not as UGC.
   let cur = "bg";
   input.textCards.forEach((card, i) => {
     const src = 3 + i;
     const next = `t${i}`;
+    const window = Math.max(0.1, card.end - card.start);
+    const outAt = Math.max(0, window - fade);
+
     chains.push(
-      `[${cur}][${src}:v]overlay=0:0:enable='between(t,${card.start},${card.end})'[${next}]`
+      `[${src}:v]format=rgba,fps=${fps},` +
+        `fade=t=in:st=0:d=${fade}:alpha=1,` +
+        `fade=t=out:st=${outAt.toFixed(2)}:d=${fade}:alpha=1,` +
+        // Shift the faded clip to where it belongs on the timeline.
+        `setpts=PTS-STARTPTS+${card.start}/TB[txt${i}]`
+    );
+    chains.push(
+      `[${cur}][txt${i}]overlay=0:${card.y}:enable='between(t,${card.start},${card.end})':eof_action=pass[${next}]`
     );
     cur = next;
   });
@@ -126,13 +189,15 @@ export function buildArgs(input: RenderInput, cfg = renderConfig()): string[] {
   // explicit rgba conversion: it is small, and its alpha is the whole point.
   chains.push(`[1:v]scale=${stickerW}:-2,format=rgba,setpts=PTS-STARTPTS[gif]`);
   chains.push(
-    `[${cur}][gif]overlay=x=(W-w)/2:y=${cfg.stickerY}*H-h/2:shortest=0:format=auto[vout]`
+    `[${cur}][gif]overlay=x=${layout.stickerCx}*W-w/2:y=${layout.stickerCy}*H-h/2:` +
+      `shortest=0:format=auto[vout]`
   );
 
-  // Layer 3 - audio: trim to length, ease in, duck out before the cut.
+  // Layer 3 - audio: start mid-track, trim to length, ease in, duck out.
+  const offset = Math.max(0, input.audioOffset ?? 0);
   const fadeOut = Math.max(0, D - 0.6);
   chains.push(
-    `[2:a]atrim=0:${D},asetpts=PTS-STARTPTS,` +
+    `[2:a]atrim=${offset.toFixed(2)}:${(offset + D).toFixed(2)},asetpts=PTS-STARTPTS,` +
       `afade=t=in:st=0:d=0.3,afade=t=out:st=${fadeOut}:d=0.6,` +
       `aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[aout]`
   );

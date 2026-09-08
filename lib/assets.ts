@@ -241,6 +241,47 @@ async function giphySticker(query: string, workDir: string, notes: string[]): Pr
   }
 }
 
+/**
+ * Retry term when the brief's own sticker query finds nothing usable.
+ *
+ * Previously every failed query retried with the literal "sparkles", so every
+ * niche product converged on the same generic sticker. Derived from what the
+ * product actually is instead; "sparkles" survives only as the last resort.
+ */
+/**
+ * Filler terms. A model that returns one of these has not really chosen - it
+ * has reached for decoration - and left alone it makes every product converge
+ * on the same sticker from the other direction, before any fallback fires.
+ */
+const GENERIC_STICKER = /^(sparkles?|stars?|magic|shine|glitter|wow|cool|nice|fun|awesome)$/i;
+
+export function fallbackStickerTerm(brief: Brief): string {
+  const haystack = `${brief.category} ${brief.valueProp} ${brief.audience}`.toLowerCase();
+  const table: [RegExp, string][] = [
+    [/calorie|nutrition|meal|food|recipe|diet|restaurant/, "food"],
+    [/fitness|workout|gym|training|running|wearable|recovery/, "muscle"],
+    [/sleep|calm|meditat|wellness|mental|mindful/, "sleep"],
+    [/finance|money|invest|bank|budget|payment|crypto|trading/, "money"],
+    [/travel|flight|hotel|trip|booking/, "airplane"],
+    [/music|audio|podcast|sound|listening/, "music"],
+    [/photo|camera|video|design|creative|editing/, "camera"],
+    [/game|gaming|player/, "game controller"],
+    [/study|learn|course|education|language|school/, "books"],
+    [/shop|store|ecommerce|retail|fashion|clothing/, "shopping"],
+    [/code|developer|programming|api|terminal|launcher|dev tool/, "computer"],
+    [/calendar|schedul|meeting|productivity|task|note/, "clock"],
+    [/chat|message|social|community|network/, "chat bubble"],
+    [/pet|dog|cat|animal/, "dog"],
+    [/car|drive|vehicle|delivery|logistics/, "car"],
+    [/security|privacy|password|vpn|encrypt/, "lock"],
+    [/search|answer|research|knowledge|ai assistant/, "lightbulb"],
+    [/browser|web|internet|website/, "globe"],
+    [/app|mobile|phone|ios|android/, "phone"],
+  ];
+  for (const [re, term] of table) if (re.test(haystack)) return term;
+  return "sparkles";
+}
+
 // ---------------------------------------------------------------- selection
 
 const fixtureBackground = (): Asset => ({
@@ -271,12 +312,35 @@ export async function selectAssets(
       (await pexelsBackground(brief.backgroundQuery, workDir, notes)) ??
       (await pixabayBackground(brief.backgroundQuery, workDir, notes)) ??
       fixtureBackground())(),
-    (async () =>
-      (await giphySticker(brief.stickerQuery, workDir, notes)) ??
-      // One retry on a generic term: a niche query returning nothing usable is
-      // common, and a generic sticker still beats the fixture.
-      (await giphySticker("sparkles", workDir, notes)) ??
-      fixtureSticker())(),
+    (async () => {
+      // A generic term from the model is overridden by one derived from what
+      // the product actually is.
+      const derivedTerm = fallbackStickerTerm(brief);
+      const primary = GENERIC_STICKER.test(brief.stickerQuery.trim())
+        ? derivedTerm
+        : brief.stickerQuery;
+      if (primary !== brief.stickerQuery) {
+        notes.push(`replaced the generic "${brief.stickerQuery}" sticker query with "${primary}"`);
+      }
+
+      const first = await giphySticker(primary, workDir, notes);
+      if (first) return first;
+
+      // Retry on a term derived from the product, then on a generic one.
+      const derived = derivedTerm;
+      if (derived !== primary) {
+        const second = await giphySticker(derived, workDir, notes);
+        if (second) {
+          notes.push(`fell back to a "${derived}" sticker`);
+          return second;
+        }
+      }
+      if (derived !== "sparkles") {
+        const last = await giphySticker("sparkles", workDir, notes);
+        if (last) return last;
+      }
+      return fixtureSticker();
+    })(),
   ]);
 
   const audio = pickAudio(brief.vibe, seed);

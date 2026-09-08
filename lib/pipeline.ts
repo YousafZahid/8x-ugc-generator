@@ -13,7 +13,7 @@ import path from "node:path";
 
 import { selectAssets } from "./assets";
 import { buildBrief } from "./brief";
-import { posterFrame, render, renderConfig } from "./render";
+import { layoutFor, posterFrame, render, renderConfig } from "./render";
 import { scrape, extractUrl } from "./scrape";
 import { ensureOutDir, posterPath, posterUrl, prune, videoPath, videoUrl } from "./storage";
 import { textCardPng } from "./text";
@@ -24,6 +24,9 @@ export type GenerateResult = {
   videoUrl: string;
   /** Still frame for the player, so the payoff is not a grey box. */
   posterUrl: string | null;
+  /** Which layout preset was used, and where the music started. */
+  layout: string;
+  audioOffset: number;
   product: Product;
   brief: Brief;
   assets: AssetSet;
@@ -32,6 +35,16 @@ export type GenerateResult = {
   ms: { scrape: number; brief: number; assets: number; render: number; total: number };
   notes: string[];
 };
+
+/** FNV-1a, matching lib/audio.ts, so seeded choices are stable per domain. */
+function hashSeed(s: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
 
 export function newId(): string {
   return randomBytes(8).toString("hex");
@@ -92,17 +105,33 @@ export async function generate(
     notes.push(...assetNotes);
     const assetsMs = Date.now() - t2;
 
+    // Start the music mid-track. Tracks are 20s and the first bars are usually
+    // an intro with no groove; opening there wastes the only 8 seconds we get.
+    // Seeded on the domain so a product is reproducible.
+    const audioOffset = 6 + (hashSeed(product.host) % 7);
+
     // 4. Draw the text, then composite.
     onProgress({ step: "compose", detail: "Compositing four layers with ffmpeg" });
     const t3 = Date.now();
 
-    const half = cfg.duration / 2;
+    const layout = layoutFor(brief.vibe);
+    const D = cfg.duration;
+
+    // Not a straight split. The hook lands almost immediately, holds, then
+    // clears; a real beat of background-only follows before the payoff. An
+    // exact halfway swap is what made it read as a slideshow.
+    const hookStart = 0.15;
+    const hookEnd = +(D * 0.45).toFixed(2);
+    const payoffStart = +(D * 0.5125).toFixed(2);
+    const payoffEnd = D;
+
     const hookPng = await textCardPng({
       text: brief.hook,
       kicker: brief.name,
       variant: "hook",
       width: cfg.width,
       height: cfg.height,
+      top: layout.textTop,
       out: path.join(work, "card-hook.png"),
     });
     const payoffPng = await textCardPng({
@@ -110,6 +139,7 @@ export async function generate(
       variant: "payoff",
       width: cfg.width,
       height: cfg.height,
+      top: layout.textTop,
       out: path.join(work, "card-payoff.png"),
     });
 
@@ -122,9 +152,11 @@ export async function generate(
         sticker: assets.sticker.path,
         audio: assets.audio.path,
         textCards: [
-          { png: hookPng, start: 0, end: half },
-          { png: payoffPng, start: half, end: cfg.duration },
+          { png: hookPng.png, y: hookPng.y, start: hookStart, end: hookEnd },
+          { png: payoffPng.png, y: payoffPng.y, start: payoffStart, end: payoffEnd },
         ],
+        audioOffset,
+        layout,
         out,
       },
       cfg
@@ -153,6 +185,8 @@ export async function generate(
       id,
       videoUrl: videoUrl(id),
       posterUrl: hasPoster ? posterUrl(id) : null,
+      layout: layout.name,
+      audioOffset,
       product,
       brief: { ...brief, source: provider ? "llm" : brief.source },
       assets,

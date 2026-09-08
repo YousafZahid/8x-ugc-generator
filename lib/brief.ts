@@ -24,6 +24,69 @@ const PAYOFF_MAX = 52;
  * apart, every lookup misses and the same default track plays on every video -
  * which is exactly what "AI picks the asset" must not mean.
  */
+/**
+ * The worked examples, separable so their effect can be A/B'd:
+ * BRIEF_NO_EXAMPLES=1 reverts to the rules-only prompt.
+ */
+function examples(): string {
+  if (process.env.BRIEF_NO_EXAMPLES) return "";
+  return `
+Worked examples. Match this register - the hook is a thought the viewer has
+already had, not a product claim.
+
+Input: a wearable that tracks recovery, strain and sleep.
+{
+  "name": "WHOOP",
+  "category": "recovery wearable",
+  "valueProp": "tracks your sleep and strain so you know when to push and when to rest",
+  "audience": "people who train hard",
+  "vibe": "hype",
+  "hook": "training hard and still exhausted?",
+  "payoff": "whoop tells you when to rest",
+  "backgroundQuery": "person lifting weights gym",
+  "stickerQuery": "muscle"
+}
+
+Input: a launcher that runs commands and scripts from a keyboard shortcut.
+{
+  "name": "Raycast",
+  "category": "mac launcher",
+  "valueProp": "runs your tools and scripts from one keyboard shortcut",
+  "audience": "developers",
+  "vibe": "clean",
+  "hook": "still hunting through six apps?",
+  "payoff": "one shortcut. everything.",
+  "backgroundQuery": "person typing laptop desk",
+  "stickerQuery": "keyboard"
+}
+
+Input: an app that logs meals from a photo.
+{
+  "name": "Cal AI",
+  "category": "calorie tracking app",
+  "valueProp": "logs a meal from one photo and gives you the macros",
+  "audience": "people tracking what they eat",
+  "vibe": "upbeat",
+  "hook": "no idea what's actually in that?",
+  "payoff": "snap it. macros in seconds.",
+  "backgroundQuery": "person photographing food plate",
+  "stickerQuery": "pizza"
+}
+
+Input: an app that rounds up spare change and invests it.
+{
+  "name": "Acorns",
+  "category": "micro investing app",
+  "valueProp": "rounds up your spare change and invests it automatically",
+  "audience": "people who never started investing",
+  "vibe": "playful",
+  "hook": "waiting until you have enough to invest?",
+  "payoff": "start with your spare change",
+  "backgroundQuery": "person paying phone cafe",
+  "stickerQuery": "money"
+}`;
+}
+
 function systemPrompt(): string {
   const vibes = availableVibes();
   return `You are a short-form video producer who writes UGC-style ads for products.
@@ -55,7 +118,8 @@ Rules that matter:
   exists for: "pizza", "fire", "thumbs up", "money". Never a brand name.
 - Write like a person, not a brochure. Lowercase is fine. Be specific.
 - Pick the vibe that genuinely fits this product's energy. Do not default to
-  the first option; a sleep tracker and a trading app do not share a mood.`;
+  the first option; a sleep tracker and a trading app do not share a mood.
+${examples()}`;
 }
 
 type RawBrief = Partial<Record<keyof Omit<Brief, "source">, unknown>>;

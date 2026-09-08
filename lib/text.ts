@@ -22,6 +22,8 @@ export type CardSpec = {
   variant: CardVariant;
   width: number;
   height: number;
+  /** Top of the text block as a fraction of height. Set by the layout preset. */
+  top?: number;
   /** Absolute path to write to. */
   out: string;
 };
@@ -80,7 +82,23 @@ function fit(text: string, width: number, upper: boolean, startSize: number, max
   return { size, lines: wrap(text, size, maxWidth, upper).slice(0, maxLines) };
 }
 
-export function buildSvg(spec: CardSpec): string {
+export type CardImage = {
+  png: string;
+  /** Y offset of the block within the frame. */
+  y: number;
+  width: number;
+  height: number;
+};
+
+/**
+ * Renders only the text block, not a full-frame transparent card.
+ *
+ * The cards are looped into video streams so they can alpha-fade, and a
+ * full-frame 1080x1920 RGBA stream per card costs real encode time. The block
+ * is roughly a third of the frame, and overlaying it at an offset is identical
+ * on screen.
+ */
+export function buildSvg(spec: CardSpec): { svg: string; y: number; width: number; height: number } {
   const { width: W, height: H, variant } = spec;
   const upper = variant === "hook";
   const copy = upper ? spec.text.toUpperCase() : spec.text;
@@ -89,13 +107,16 @@ export function buildSvg(spec: CardSpec): string {
   const lineHeight = Math.round(size * 1.12);
   const stroke = Math.max(4, Math.round(size * 0.13));
 
-  // Both variants sit in the upper third, above the sticker at 0.6H.
-  const blockTop = Math.round(H * 0.15);
+  // Position comes from the layout preset, not a constant: the sticker moves
+  // with it, and the two must not collide.
+  const blockTop = Math.round(H * (spec.top ?? 0.15));
+  // The drop shadow and stroke bleed past the glyphs, so the block gets padding.
+  const pad = Math.round(size * 0.55);
   const kickerSize = Math.round(size * 0.34);
   // Generous: the headline carries a heavy stroke plus a drop shadow, both of
   // which grow its visual box well past the type metrics.
   const kickerGap = spec.kicker ? Math.round(kickerSize * 3.0) : 0;
-  const firstBaseline = blockTop + kickerGap + size;
+  const firstBaseline = kickerGap + size + pad;
 
   const tspans = lines
     .map((line, i) => {
@@ -105,12 +126,17 @@ export function buildSvg(spec: CardSpec): string {
     .join("\n    ");
 
   const kicker = spec.kicker
-    ? `<text x="${W / 2}" y="${blockTop + kickerSize}" class="kick">${escapeXml(
+    ? `<text x="${W / 2}" y="${kickerSize + pad}" class="kick">${escapeXml(
         spec.kicker.toUpperCase()
       )}</text>`
     : "";
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+  const blockHeight = Math.min(
+    H,
+    Math.round(kickerGap + size + lines.length * lineHeight + pad * 2)
+  );
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${blockHeight}" viewBox="0 0 ${W} ${blockHeight}">
   <defs>
     <filter id="sh" x="-25%" y="-25%" width="150%" height="150%">
       <feDropShadow dx="0" dy="${Math.round(size * 0.06)}" stdDeviation="${Math.round(
@@ -148,13 +174,13 @@ export function buildSvg(spec: CardSpec): string {
   ${kicker}
     ${tspans}
 </svg>`;
+
+  return { svg, y: Math.min(blockTop, H - blockHeight), width: W, height: blockHeight };
 }
 
-/** Rasterises one card to a transparent PNG. Returns the path written. */
-export async function textCardPng(spec: CardSpec): Promise<string> {
-  const svg = buildSvg(spec);
-  await sharp(Buffer.from(svg))
-    .png({ compressionLevel: 6 })
-    .toFile(spec.out);
-  return spec.out;
+/** Rasterises one card to a transparent PNG, with its placement. */
+export async function textCardPng(spec: CardSpec): Promise<CardImage> {
+  const { svg, y, width, height } = buildSvg(spec);
+  await sharp(Buffer.from(svg)).png({ compressionLevel: 6 }).toFile(spec.out);
+  return { png: spec.out, y, width, height };
 }

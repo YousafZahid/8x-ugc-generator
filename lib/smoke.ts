@@ -159,7 +159,6 @@ export async function runSmoke(outDir?: string): Promise<SmokeReport> {
     out: path.join(work, "card-payoff.png"),
   });
 
-  const half = cfg.duration / 2;
   const result = await render(
     {
       background: path.join(FIXTURES, "bg.mp4"),
@@ -167,9 +166,11 @@ export async function runSmoke(outDir?: string): Promise<SmokeReport> {
       // The library track, not the fixture tone bed: the loudness assertion
       // below is only meaningful if it measures what ships.
       audio: pickAudio("upbeat", "smoke").path,
+      // Same windows the pipeline uses, so the smoke render exercises the real
+      // timing rather than a straight halfway split.
       textCards: [
-        { png: hook, start: 0, end: half },
-        { png: payoff, start: half, end: cfg.duration },
+        { png: hook.png, y: hook.y, start: 0.15, end: +(cfg.duration * 0.45).toFixed(2) },
+        { png: payoff.png, y: payoff.y, start: +(cfg.duration * 0.5125).toFixed(2), end: cfg.duration },
       ],
       out: path.join(work, "smoke.mp4"),
     },

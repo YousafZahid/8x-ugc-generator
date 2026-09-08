@@ -28,7 +28,7 @@ async function main() {
   console.log(`    vibe        ${r.brief.vibe}`);
   console.log(`    hook        "${r.brief.hook}"`);
   console.log(`    payoff      "${r.brief.payoff}"`);
-  console.log(`    background  ${r.brief.backgroundQuery}`);
+  console.log(`    background  ${r.brief.backgroundQueries.join(" / ")}`);
   console.log(`    stickers    ${r.brief.stickerQueries.join(" / ")}`);
 
   console.log(`\n  ASSETS`);

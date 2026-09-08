@@ -76,7 +76,44 @@ function bestFile(video: PexelsVideo): string | null {
   return scored[0]?.f.link ?? null;
 }
 
-async function pexelsBackground(query: string, workDir: string, notes: string[]): Promise<Asset | null> {
+/**
+ * Pexels puts a description in the URL slug:
+ *   /video/person-using-a-laptop-while-holding-a-card-1234567/
+ * That is the only relevance signal the API gives us, and it is a good one.
+ */
+function pexelsSlugWords(url: string): string {
+  return url
+    .replace(/^https?:\/\/www\.pexels\.com\/video\//, "")
+    .replace(/-?\d+\/?$/, "")
+    .replace(/-/g, " ");
+}
+
+/**
+ * How well a clip matches what the brief asked to film.
+ *
+ * The background layer had no relevance check at all: it took the first of the
+ * top four results that downloaded. Searching "person reviewing property map
+ * on laptop" for a property marketplace returned "person using a laptop while
+ * holding a card" at rank 0 and "world map on a laptop screen" at rank 4, and
+ * the card one won for being first. Pexels keyword-matches loosely enough that
+ * rank is close to meaningless.
+ */
+export function backgroundScore(video: { url?: string }, query: string, brief: Brief): number {
+  const hay = new Set(words(pexelsSlugWords(video.url ?? "")));
+  if (!hay.size) return 0;
+
+  let score = 0;
+  for (const w of words(query)) if (hay.has(w)) score += 3;
+  for (const w of words(brief.category)) if (hay.has(w)) score += 2;
+  return score;
+}
+
+async function pexelsBackground(
+  queries: string[],
+  brief: Brief,
+  workDir: string,
+  notes: string[]
+): Promise<Asset | null> {
   const key = process.env.PEXELS_API_KEY;
   if (!key) {
     notes.push("no Pexels key - using the fixture background");
@@ -84,31 +121,50 @@ async function pexelsBackground(query: string, workDir: string, notes: string[])
   }
 
   try {
-    const url =
-      `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}` +
-      `&per_page=12&orientation=portrait&size=medium`;
-    const res = await fetch(url, {
-      headers: { Authorization: key },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-    if (!res.ok) {
-      notes.push(`Pexels HTTP ${res.status}`);
+    // Every query is searched, and the winner is the best clip across all of
+    // them rather than the best clip from whichever ran first.
+    const pages = await Promise.all(
+      queries.map(async (query) => {
+        const url =
+          `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}` +
+          `&per_page=20&orientation=portrait&size=medium`;
+        const res = await fetch(url, {
+          headers: { Authorization: key },
+          signal: AbortSignal.timeout(TIMEOUT_MS),
+        });
+        if (!res.ok) {
+          notes.push(`Pexels HTTP ${res.status}`);
+          return [];
+        }
+        const body = (await res.json()) as { videos?: PexelsVideo[] };
+        return (body.videos ?? []).map((video, rank) => ({
+          video,
+          rank,
+          score: backgroundScore(video, query, brief),
+        }));
+      })
+    );
+
+    const all = pages.flat();
+    if (!all.length) {
+      notes.push(`Pexels had nothing for ${queries.map((q) => `"${q}"`).join(" / ")}`);
       return null;
     }
 
-    const body = (await res.json()) as { videos?: PexelsVideo[] };
-    const videos = body.videos ?? [];
-    if (!videos.length) {
-      notes.push(`Pexels had nothing for "${query}"`);
-      return null;
+    const ranked = all.sort((a, b) => b.score - a.score || a.rank - b.rank);
+    const relevant = ranked.filter((r) => r.score > 0);
+    const pool = relevant.length ? relevant : ranked;
+    if (!relevant.length) {
+      notes.push("no Pexels clip described itself in the brief's terms - used the closest match");
     }
+    const videos = all;
 
-    // Try candidates in order - a single dead CDN link should not sink it.
-    for (const video of videos.slice(0, 4)) {
+    for (const { video, score } of pool.slice(0, 5)) {
       const link = bestFile(video);
       if (!link) continue;
       const dest = path.join(workDir, "background.mp4");
       if (await download(link, dest)) {
+        notes.push(`footage scored ${score} of ${videos.length} candidates`);
         return {
           path: dest,
           source: "pexels",
@@ -440,8 +496,8 @@ export async function selectAssets(
   // the critical path instead of hiding it behind the Pexels download.
   const [background, sticker, live] = await Promise.all([
     (async () =>
-      (await pexelsBackground(brief.backgroundQuery, workDir, notes)) ??
-      (await pixabayBackground(brief.backgroundQuery, workDir, notes)) ??
+      (await pexelsBackground(brief.backgroundQueries, brief, workDir, notes)) ??
+      (await pixabayBackground(brief.backgroundQueries[0] ?? "", workDir, notes)) ??
       fixtureBackground())(),
     (async () => {
       // Drop filler terms, add the derived one, then score across all of them

@@ -106,7 +106,7 @@ export async function generate(
     // 3. Cast it.
     onProgress({
       step: "assets",
-      detail: `Finding "${brief.backgroundQuery}" footage and a ${brief.stickerQueries[0]} sticker`,
+      detail: `Finding "${brief.backgroundQueries[0]}" footage and a ${brief.stickerQueries[0]} sticker`,
     });
     const t2 = Date.now();
     // The track must cover the video plus the mid-track offset we intend to use.
@@ -199,7 +199,7 @@ export async function generate(
       a.credit.split(" via ")[0].split(" (")[0].replace(/^Video by /, "").trim();
 
     const picks = {
-      background: brief.backgroundQuery,
+      background: brief.backgroundQueries[0] ?? "",
       sticker: shortLabel(assets.sticker),
       track: shortLabel(assets.audio),
     };

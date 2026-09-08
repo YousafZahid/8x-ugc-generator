@@ -62,11 +62,32 @@ type JamendoTrack = {
  * suited the product. That is why the audio kept landing on full vocal songs
  * like "A Love Song" under a language-learning ad.
  */
+/**
+ * Tags that make a track wrong for a product ad regardless of its genre.
+ *
+ * Jamendo's tags are uploader-supplied and loose: a track tagged "minimal" can
+ * be a children's song, and one of these landed under a property marketplace.
+ * Genre overlap alone cannot catch that, so these are excluded outright.
+ */
+const UNSUITABLE = new Set([
+  "children", "kids", "kid", "childrens", "child", "nursery", "lullaby",
+  "christmas", "xmas", "halloween", "religious", "gospel", "worship", "hymn",
+  "metal", "deathmetal", "blackmetal", "hardcore", "punk", "noise", "scream",
+  "horror", "creepy", "sad", "funeral", "spokenword", "speech", "podcast",
+]);
+
 function scoreTrack(track: JamendoTrack, wanted: string[]): number {
   const genres = track.musicinfo?.tags?.genres ?? [];
   const vartags = track.musicinfo?.tags?.vartags ?? [];
   const hay = new Set([...genres, ...vartags].map((t) => t.toLowerCase()));
   const name = (track.name ?? "").toLowerCase();
+
+  // Disqualified outright rather than ranked down: no amount of genre match
+  // makes a nursery rhyme right under a property ad.
+  for (const t of hay) if (UNSUITABLE.has(t)) return -1;
+  for (const w of ["children", "kids", "lullaby", "christmas"]) {
+    if (name.includes(w)) return -1;
+  }
 
   let score = 0;
   for (const w of wanted) {
@@ -225,8 +246,18 @@ export async function jamendoTrack(
     // give every product in a genre the same track; seeding alone was what
     // produced a random pick out of forty.
     const ranked = results
-      .map((t) => ({ t, score: scoreTrack(t, [tag, ...briefTags]) }))
-      .sort((a, b) => b.score - a.score);
+      .map((t, rank) => ({ t, rank, score: scoreTrack(t, [tag, ...briefTags]) }))
+      .filter((r) => r.score >= 0)
+      // Jamendo's own popularity order breaks ties. Without it the top eight
+      // were frequently all on the same score and the seeded pick was
+      // arbitrary among them.
+      .sort((a, b) => b.score - a.score || a.rank - b.rank);
+
+    if (!ranked.length) continue;
+    // Nothing actually matched the genre asked for; the next tag will do
+    // better than an arbitrary track from this one.
+    if (ranked[0].score === 0 && ladder.indexOf(tag) < ladder.length - 1) continue;
+
     const pool = ranked.slice(0, Math.min(8, ranked.length)).map((r) => r.t);
 
     const start = hash(seed) % pool.length;

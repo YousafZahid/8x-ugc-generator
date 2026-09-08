@@ -39,8 +39,14 @@ export type Brief = {
   hook: string;
   /** Second text card. The payoff or CTA. */
   payoff: string;
-  /** Search terms for Pexels. Concrete and filmable, not abstract. */
-  backgroundQuery: string;
+  /**
+   * Two or three ranked stock-footage searches, best first.
+   *
+   * Ranked for the same reason the sticker queries are: one over-specific
+   * phrase returns whatever the library loosely keyword-matched, and there is
+   * no second chance. Ordered specific to broad.
+   */
+  backgroundQueries: string[];
   /**
    * Two or three music genre tags for this specific product and ad, best
    * first. Vibe is a coarse bucket - six of them cannot tell a fintech ad from

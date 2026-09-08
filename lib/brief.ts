@@ -44,7 +44,7 @@ Input: a subscription that ships running shoes twice a year.
   "vibe": "hype",
   "hook": "running on shoes from two years ago?",
   "payoff": "fresh pair, every season",
-  "backgroundQuery": "person running city street",
+  "backgroundQueries": ["person running city street", "runner sunrise road"],
   "musicTags": ["phonk", "trap", "hiphop"],
   "stickerQueries": ["running shoe", "fire", "timer"]
 }
@@ -58,7 +58,7 @@ Input: a password manager that fills logins across devices.
   "vibe": "clean",
   "hook": "resetting your password again?",
   "payoff": "one place for every login",
-  "backgroundQuery": "person typing laptop desk",
+  "backgroundQueries": ["hands typing keyboard closeup", "person working laptop desk"],
   "musicTags": ["minimal", "techno", "ambient"],
   "stickerQueries": ["lock", "shield", "checkmark"]
 }
@@ -72,7 +72,7 @@ Input: a meal kit that delivers pre-portioned dinner ingredients.
   "vibe": "upbeat",
   "hook": "staring into the fridge again?",
   "payoff": "dinner sorted in twenty minutes",
-  "backgroundQuery": "person cooking kitchen evening",
+  "backgroundQueries": ["fresh ingredients chopping board", "person cooking kitchen evening"],
   "musicTags": ["funk", "soul", "indie"],
   "stickerQueries": ["cooking", "timer", "chef"]
 }
@@ -86,7 +86,7 @@ Input: an invoicing tool for freelancers that chases late payments.
   "vibe": "playful",
   "hook": "still waiting on that invoice?",
   "payoff": "it chases them so you don't",
-  "backgroundQuery": "person working laptop cafe",
+  "backgroundQueries": ["freelancer working cafe laptop", "person paying phone"],
   "musicTags": ["lofi", "chillout", "jazz"],
   "stickerQueries": ["money", "invoice", "checkmark"]
 }`;
@@ -108,7 +108,7 @@ Return ONLY a JSON object with exactly these keys:
   "vibe":            EXACTLY one of these, no other value: ${vibes.join(" | ")}
   "hook":            FIRST on-screen text. Max ${HOOK_MAX} characters.
   "payoff":          SECOND on-screen text. Max ${PAYOFF_MAX} characters.
-  "backgroundQuery": 2-4 words for a STOCK FOOTAGE search
+  "backgroundQueries": ARRAY of 2-3 stock footage searches, best first
   "musicTags":       ARRAY of 2-3 music GENRE tags for this ad, best first
   "stickerQueries":  ARRAY of 2-3 sticker search terms, best first
 }
@@ -117,9 +117,15 @@ Rules that matter:
 - The hook must stop a thumb. Speak to the problem, not the product. No brand
   name in the hook. No hashtags, no emoji, no quotation marks.
 - The payoff names the product or the action. It is the reason to care.
-- backgroundQuery must describe something a camera can film: "person cooking
-  breakfast", "city street night". Never abstractions like "productivity" or
-  "innovation" - stock libraries return garbage for those.
+- backgroundQueries must film the product's SUBJECT, not someone using a
+  computer. A property marketplace shows houses and neighbourhoods. A recipe
+  app shows food being cooked. A running app shows someone running. Default to
+  a person at a laptop ONLY when the product genuinely has no visual subject,
+  and even then put the subject first and the laptop shot second.
+- Order them specific to broad, because a stock library may hold nothing for
+  the narrow one: ["modern house exterior", "real estate neighbourhood",
+  "person browsing laptop"]. Each must be something a camera can film - never
+  abstractions like "productivity" or "innovation".
 - musicTags name the genre that should play under THIS ad, judged from the
   product's niche and audience. Use real genre words a music library indexes:
   lofi, chillout, ambient, hiphop, trap, phonk, drumnbass, house, techno,
@@ -243,7 +249,7 @@ export function fallbackBrief(product: Product, message: string): Brief {
     vibe: "upbeat",
     hook: str(sentence, HOOK_MAX) || `you need to see this`,
     payoff: `${name} — try it today`.slice(0, PAYOFF_MAX),
-    backgroundQuery,
+    backgroundQueries: [backgroundQuery],
     stickerQueries: [stickerQuery, "sparkles"],
     musicTags: [],
     source: "fallback",
@@ -297,7 +303,7 @@ export async function buildBrief(
     payoff: str(data.payoff, PAYOFF_MAX, fb.payoff),
     // A model that ignores the "filmable" rule poisons the whole video, so an
     // empty or abstract query falls back rather than reaching Pexels.
-    backgroundQuery: str(data.backgroundQuery, 60, fb.backgroundQuery),
+    backgroundQueries: toQueries(data.backgroundQueries, fb.backgroundQueries),
     stickerQueries: toQueries(data.stickerQueries, fb.stickerQueries),
     musicTags: toQueries(data.musicTags, fb.musicTags),
     source: "llm",

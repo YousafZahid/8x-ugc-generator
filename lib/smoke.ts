@@ -76,9 +76,28 @@ const FLAT = 12;
  * present, inaudible on a phone. A codec check cannot see that.
  */
 async function loudness(file: string): Promise<number> {
+  // loudnorm's JSON summary first: it is stable across ffmpeg builds. The
+  // ebur128 parse used here originally returned nothing on Debian's ffmpeg
+  // 5.1 in the container, so the check reported -99 in production while
+  // passing locally on 8.0.
   try {
     const { stderr } = await exec("ffmpeg", [
-      "-hide_banner", "-i", file, "-af", "ebur128=framelog=quiet", "-f", "null", "-",
+      "-hide_banner", "-i", file,
+      "-af", "loudnorm=I=-14:TP=-1:LRA=11:print_format=json",
+      "-f", "null", "-",
+    ], { maxBuffer: 16 * 1024 * 1024, encoding: "utf8" });
+    const text = String(stderr);
+    const json = text.slice(text.lastIndexOf("{"), text.lastIndexOf("}") + 1);
+    const parsed = JSON.parse(json) as { input_i?: string };
+    const value = Number(parsed.input_i);
+    if (Number.isFinite(value)) return value;
+  } catch {
+    // fall through
+  }
+
+  try {
+    const { stderr } = await exec("ffmpeg", [
+      "-hide_banner", "-i", file, "-af", "ebur128", "-f", "null", "-",
     ], { maxBuffer: 16 * 1024 * 1024, encoding: "utf8" });
     const m = String(stderr).match(/I:\s*(-?[\d.]+) LUFS/);
     return m ? Number(m[1]) : -99;

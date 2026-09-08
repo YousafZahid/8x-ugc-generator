@@ -42,6 +42,9 @@ export async function GET() {
         gemini: Boolean(process.env.GEMINI_API_KEY),
         pexels: Boolean(process.env.PEXELS_API_KEY),
         giphy: Boolean(process.env.GIPHY_API_KEY),
+        // Without this the live music tier is off and nothing says so: every
+        // render still succeeds, quietly served by the committed library.
+        jamendo: Boolean(process.env.JAMENDO_CLIENT_ID),
       },
     },
     { status: ok ? 200 : 503 }

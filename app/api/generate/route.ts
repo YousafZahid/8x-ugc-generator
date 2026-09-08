@@ -41,12 +41,14 @@ export async function GET(req: Request) {
       // close() threw a ReferenceError, Next tore the stream down, and the
       // client got an empty body and hung on "rendering" forever.
       let keepAlive: ReturnType<typeof setInterval> | undefined;
+      let watchdog: ReturnType<typeof setInterval> | undefined;
 
       const close = () => {
         if (closed) return;
         closed = true;
         job.listeners.delete(onProgress);
         if (keepAlive) clearInterval(keepAlive);
+        if (watchdog) clearInterval(watchdog);
         try {
           controller.close();
         } catch {
@@ -55,6 +57,9 @@ export async function GET(req: Request) {
       };
 
       const settle = () => {
+        // Never close on a job that has not actually finished: closing without
+        // a done event is indistinguishable from a hang on the client.
+        if (!job.done) return;
         if (job.error) send("error", { message: job.error });
         else if (job.result) {
           send("done", {
@@ -72,6 +77,12 @@ export async function GET(req: Request) {
         if (p.step === "done" || p.step === "error") settle();
         else send("progress", p);
       };
+
+      // Last resort: if a job somehow finishes without a terminal event
+      // reaching us, notice rather than holding the connection open.
+      watchdog = setInterval(() => {
+        if (job.done) settle();
+      }, 1000);
 
       // Replay what already happened before this client connected.
       for (const p of job.events) {

@@ -132,8 +132,11 @@ export async function generate(
       .filter((a) => a.source !== "fixture")
       .map((a) => (a.link ? `${a.credit} (${a.link})` : a.credit));
 
-    onProgress({ step: "done", detail: "Done." });
-
+    // Deliberately does NOT emit step:"done". Completion is announced by
+    // jobs.finish() once the result is actually attached to the job. Emitting
+    // it here raced the assignment: an SSE subscriber saw "done", looked for
+    // job.result, found nothing, sent no event and closed the stream - so the
+    // browser sat on a spinner forever while the video sat finished on disk.
     return {
       id,
       videoUrl: videoUrl(id),

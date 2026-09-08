@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 export const metadata: Metadata = {
-  title: "UGC Video Generator",
+  title: "UGC Studio",
   description:
-    "Describe a product, get a vertical UGC-style ad. Real stock assets composited with ffmpeg - no AI-generated frames.",
+    "Turn a website into a short vertical video ad - background video, music and animated stickers.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

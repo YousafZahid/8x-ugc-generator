@@ -2,36 +2,33 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-type Stage = { key: string; label: string };
-
 /**
- * Fixed checklist. Rendering the stages up front - greyed until reached - lets
- * the 13-second wait read as a known sequence rather than an unbounded hang.
+ * Progress copy, in the order it appears.
+ *
+ * Deliberately not the pipeline's stage names. "Reading the site ->
+ * Understanding the product -> Choosing footage, sticker and music ->
+ * Compositing four layers" describes how this is built, which is not something
+ * the user asked to know. The wait still has to feel accounted for, so the
+ * phases remain, worded as what is happening to their video.
  */
-const STAGES: Stage[] = [
-  { key: "read", label: "Reading the site" },
-  { key: "understand", label: "Understanding the product" },
-  { key: "assets", label: "Choosing footage, sticker & music" },
-  { key: "compose", label: "Compositing four layers" },
-];
+const PHASES: Record<string, string> = {
+  read: "Looking at your site",
+  understand: "Working out what to say",
+  assets: "Finding the right visuals and music",
+  compose: "Putting your video together",
+};
+const PHASE_ORDER = ["read", "understand", "assets", "compose"];
 
 type Msg = {
   id: string;
   role: "user" | "assistant";
   text: string;
-  /** Latest detail line per stage key. */
-  stageDetail?: Record<string, string>;
-  reached?: string[];
-  product?: string;
-  hook?: string;
+  phase?: string;
   videoUrl?: string;
   posterUrl?: string | null;
   credits?: string[];
-  picks?: { background: string; sticker: string; track: string };
-  notes?: string[];
   pending?: boolean;
   failed?: boolean;
-  /** Inline playback failed - the file is still fine, offer the download. */
   unplayable?: boolean;
 };
 
@@ -64,11 +61,11 @@ export default function Home() {
 
   const copy = useCallback(async (url: string) => {
     try {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(window.location.origin + url);
       setCopied(url);
       setTimeout(() => setCopied(null), 1600);
     } catch {
-      // Clipboard is permission-gated; the input below is selectable regardless.
+      // Clipboard is permission-gated; the download link still works.
     }
   }, []);
 
@@ -79,24 +76,8 @@ export default function Home() {
       esRef.current = es;
 
       es.addEventListener("progress", (e) => {
-        const p = JSON.parse((e as MessageEvent).data) as {
-          step: string;
-          detail: string;
-          meta?: { product?: string; hook?: string };
-        };
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === msgId
-              ? {
-                  ...m,
-                  reached: Array.from(new Set([...(m.reached ?? []), p.step])),
-                  stageDetail: { ...(m.stageDetail ?? {}), [p.step]: p.detail },
-                  product: p.meta?.product ?? m.product,
-                  hook: p.meta?.hook ?? m.hook,
-                }
-              : m
-          )
-        );
+        const p = JSON.parse((e as MessageEvent).data) as { step: string };
+        if (PHASES[p.step]) patch(msgId, { phase: p.step });
       });
 
       es.addEventListener("done", (e) => {
@@ -104,16 +85,13 @@ export default function Home() {
           videoUrl: string;
           posterUrl: string | null;
           credits: string[];
-          picks?: { background: string; sticker: string; track: string };
-          notes: string[];
         };
         patch(msgId, {
           pending: false,
+          phase: undefined,
           videoUrl: d.videoUrl,
           posterUrl: d.posterUrl,
           credits: d.credits,
-          picks: d.picks,
-          notes: d.notes,
           text: "Here's your ad.",
         });
         setBusy(false);
@@ -124,8 +102,8 @@ export default function Home() {
         const raw = (e as MessageEvent).data;
         const message = raw
           ? (JSON.parse(raw) as { message: string }).message
-          : "The connection dropped while rendering. Send it again and I'll retry.";
-        patch(msgId, { pending: false, failed: true, text: message });
+          : "The connection dropped while making your video. Send it again and I'll retry.";
+        patch(msgId, { pending: false, phase: undefined, failed: true, text: message });
         setBusy(false);
         es.close();
       });
@@ -142,11 +120,8 @@ export default function Home() {
       setBusy(true);
       setMessages((prev) => [...prev, { id: nextId(), role: "user", text }]);
 
-      const placeholderId = nextId();
-      setMessages((prev) => [
-        ...prev,
-        { id: placeholderId, role: "assistant", text: "", pending: true },
-      ]);
+      const id = nextId();
+      setMessages((prev) => [...prev, { id, role: "assistant", text: "", pending: true }]);
 
       try {
         const res = await fetch("/api/chat", {
@@ -162,20 +137,21 @@ export default function Home() {
         };
 
         if (data.error) {
-          patch(placeholderId, { pending: false, failed: true, text: data.error });
+          patch(id, { pending: false, failed: true, text: data.error });
           setBusy(false);
           return;
         }
 
-        patch(placeholderId, {
+        patch(id, {
           text: data.reply ?? "",
           pending: data.action === "generate",
+          phase: data.action === "generate" ? "read" : undefined,
         });
 
-        if (data.action === "generate" && data.jobId) watch(data.jobId, placeholderId);
+        if (data.action === "generate" && data.jobId) watch(data.jobId, id);
         else setBusy(false);
       } catch {
-        patch(placeholderId, {
+        patch(id, {
           pending: false,
           failed: true,
           text: "Couldn't reach the server. Check your connection and try again.",
@@ -192,42 +168,32 @@ export default function Home() {
     <main>
       <header>
         <div className="brand">
-          <span className="dot" />
-          <h1>UGC Video Generator</h1>
+          <span className="mark" />
+          <span className="wordmark">UGC Studio</span>
         </div>
-        <p>
-          Send a product and its link. I read the site, then cut an 8-second vertical ad from
-          real stock footage, an animated sticker and a music bed. <b>No AI-generated frames.</b>
-        </p>
       </header>
 
       <div className={`scroll ${empty ? "centered" : ""}`} ref={scrollRef}>
         {empty ? (
-          <div className="empty">
-            <div className="layers">
-              {[
-                ["1", "Background", "Stock video"],
-                ["2", "Text", "Timed overlays"],
-                ["3", "Audio", "Matched to vibe"],
-                ["4", "Sticker", "Transparent GIF"],
-              ].map(([n, t, s]) => (
-                <div key={n} className="layer">
-                  <span className="n">{n}</span>
-                  <span className="t">{t}</span>
-                  <span className="s">{s}</span>
-                </div>
-              ))}
-            </div>
-            <p className="try">Try one:</p>
+          <div className="hero">
+            <h1>
+              Turn a website into a
+              <br />
+              <em>video ad</em>
+            </h1>
+            <p className="lede">
+              Give me a link and I&rsquo;ll put together a short vertical ad &mdash; background
+              video, music and animated stickers, ready to post.
+            </p>
+
             <div className="examples">
               {EXAMPLES.map((ex) => (
                 <button key={ex.label} onClick={() => void send(ex.text)} disabled={busy}>
-                  <b>{ex.label}</b>
-                  <span>{ex.text}</span>
+                  <span className="dot" />
+                  {ex.label}
                 </button>
               ))}
             </div>
-            <p className="or">…or describe your own product with its URL.</p>
           </div>
         ) : (
           <div className="thread">
@@ -237,37 +203,22 @@ export default function Home() {
                   {m.text && <div className="text">{m.text}</div>}
 
                   {m.pending && (
-                    <div className="stages">
-                      {STAGES.map((stage) => {
-                        const reached = m.reached?.includes(stage.key);
-                        const active =
-                          reached && m.reached?.[m.reached.length - 1] === stage.key;
-                        return (
-                          <div
-                            key={stage.key}
-                            className={`stage ${reached ? "on" : ""} ${active ? "active" : ""}`}
-                          >
-                            <span className="mark">
-                              {active ? <span className="spin" /> : reached ? "✓" : "○"}
-                            </span>
-                            <span className="lbl">
-                              {(reached && m.stageDetail?.[stage.key]) || stage.label}
-                            </span>
-                          </div>
-                        );
-                      })}
-                      <div className="bar">
-                        <span
+                    <div className="working">
+                      <span className="spin" />
+                      <span className="phase">
+                        {(m.phase && PHASES[m.phase]) ?? "Getting started"}&hellip;
+                      </span>
+                      <span className="bar">
+                        <i
                           style={{
-                            width: `${((m.reached?.length ?? 0) / STAGES.length) * 100}%`,
+                            width: `${
+                              (((m.phase ? PHASE_ORDER.indexOf(m.phase) : 0) + 1) /
+                                (PHASE_ORDER.length + 1)) *
+                              100
+                            }%`,
                           }}
                         />
-                      </div>
-                      {m.hook && (
-                        <div className="preview">
-                          Headline: <b>&ldquo;{m.hook}&rdquo;</b>
-                        </div>
-                      )}
+                      </span>
                     </div>
                   )}
 
@@ -276,9 +227,7 @@ export default function Home() {
                       {m.unplayable ? (
                         <div className="noplay">
                           <p>Your browser couldn&rsquo;t play this inline.</p>
-                          <p className="muted">
-                            The file is fine — download it or open it in a new tab.
-                          </p>
+                          <p className="muted">The file is fine &mdash; download it instead.</p>
                         </div>
                       ) : (
                         <video
@@ -293,45 +242,22 @@ export default function Home() {
                           onError={() => patch(m.id, { unplayable: true })}
                         />
                       )}
-                      <div className="urlrow">
-                        <input readOnly value={m.videoUrl} onFocus={(e) => e.target.select()} />
+
+                      <div className="actions">
                         <button onClick={() => void copy(m.videoUrl!)}>
-                          {copied === m.videoUrl ? "Copied" : "Copy"}
+                          {copied === m.videoUrl ? "Link copied" : "Copy link"}
                         </button>
                         <a href={m.videoUrl} download>
                           Download
                         </a>
                       </div>
-                      {m.picks && (
-                        <ul className="picks">
-                          <li>
-                            <span>footage</span>
-                            {m.picks.background}
-                          </li>
-                          <li>
-                            <span>sticker</span>
-                            {m.picks.sticker}
-                          </li>
-                          <li>
-                            <span>track</span>
-                            {m.picks.track}
-                          </li>
-                        </ul>
-                      )}
-                      <p className="expiry">
-                        Renders are ephemeral — this link dies when the server restarts.
-                      </p>
+
                       {m.credits && m.credits.length > 0 && (
                         <details>
-                          <summary>Credits &amp; how it was made</summary>
+                          <summary>Licences</summary>
                           <ul>
                             {m.credits.map((c) => (
                               <li key={c}>{c}</li>
-                            ))}
-                            {m.notes?.map((n) => (
-                              <li key={n} className="muted">
-                                {n}
-                              </li>
                             ))}
                           </ul>
                         </details>
@@ -351,16 +277,18 @@ export default function Home() {
           void send(input);
         }}
       >
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={busy ? "Rendering — one at a time…" : "e.g. I'm building Notion — notion.so"}
-          disabled={busy}
-          aria-label="Describe your product"
-        />
-        <button type="submit" disabled={busy || !input.trim()}>
-          {busy ? <span className="spin dark" /> : "Send"}
-        </button>
+        <div className="field">
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder={busy ? "Making your video…" : "Paste a website link"}
+            disabled={busy}
+            aria-label="Website link"
+          />
+          <button type="submit" disabled={busy || !input.trim()} aria-label="Send">
+            {busy ? <span className="spin light" /> : <ArrowUp />}
+          </button>
+        </div>
       </form>
 
       <style jsx global>{`
@@ -374,153 +302,137 @@ export default function Home() {
         body {
           margin: 0;
           height: 100%;
-          background: #0b0b0f;
-          color: #ececf1;
+          background: #07070b;
+          color: #eceef5;
           font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
           -webkit-font-smoothing: antialiased;
         }
       `}</style>
 
       <style jsx>{`
+        /* Layered surfaces rather than one flat black: page, panels and the
+           composer each sit at a different level so every edge is readable. */
         main {
-          max-width: 700px;
+          --surface: #12131b;
+          --surface-2: #191b25;
+          --line: #262936;
+          --line-bright: #343849;
+          --text: #eceef5;
+          --muted: #8b8fa3;
+          --accent: #6d5cff;
+          --accent-2: #a855f7;
+
+          position: relative;
+          max-width: 720px;
           margin: 0 auto;
           height: 100dvh;
           display: flex;
           flex-direction: column;
-          padding: 18px 16px 14px;
+          padding: 20px 20px 18px;
+          isolation: isolate;
         }
+        main::before {
+          content: "";
+          position: fixed;
+          inset: 0;
+          z-index: -1;
+          background:
+            radial-gradient(60rem 32rem at 50% -12%, rgba(109, 92, 255, 0.16), transparent 70%),
+            radial-gradient(40rem 24rem at 90% 8%, rgba(168, 85, 247, 0.1), transparent 70%);
+          pointer-events: none;
+        }
+
         header {
           flex: none;
+          padding-bottom: 16px;
         }
         .brand {
-          display: flex;
+          display: inline-flex;
           align-items: center;
           gap: 9px;
         }
-        .dot {
-          width: 9px;
-          height: 9px;
-          border-radius: 50%;
-          background: #6c5cff;
-          box-shadow: 0 0 12px #6c5cff;
-          flex: none;
+        .mark {
+          width: 22px;
+          height: 22px;
+          border-radius: 7px;
+          background: linear-gradient(135deg, var(--accent), var(--accent-2));
+          box-shadow: 0 4px 16px rgba(109, 92, 255, 0.45);
         }
-        h1 {
-          font-size: 17px;
-          margin: 0;
-          letter-spacing: -0.01em;
+        .wordmark {
+          font-size: 14.5px;
           font-weight: 650;
+          letter-spacing: -0.01em;
         }
-        header p {
-          margin: 8px 0 14px;
-          font-size: 13px;
-          line-height: 1.55;
-          color: #9596a6;
-        }
-        header b {
-          color: #cfd0dc;
-          font-weight: 600;
-        }
+
         .scroll {
           flex: 1;
           overflow-y: auto;
-          border-top: 1px solid #1b1b23;
-          padding-top: 16px;
           min-height: 0;
+          padding: 4px 2px 8px;
         }
-        /* Empty state is centred: top-aligned it leaves a dead void above the
-           composer on a tall desktop window. */
         .scroll.centered {
           display: flex;
           flex-direction: column;
           justify-content: center;
         }
 
-        /* ---------- empty state ---------- */
-        .empty {
-          padding: 4px 0 8px;
+        .hero h1 {
+          font-size: clamp(30px, 6vw, 42px);
+          line-height: 1.08;
+          letter-spacing: -0.035em;
+          font-weight: 680;
+          margin: 0 0 16px;
         }
-        .layers {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 8px;
-          margin-bottom: 22px;
+        .hero em {
+          font-style: normal;
+          background: linear-gradient(100deg, #a78bfa, #6d5cff 55%, #22d3ee);
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
         }
-        .layer {
-          background: #121218;
-          border: 1px solid #1f1f29;
-          border-radius: 10px;
-          padding: 10px 9px;
-          display: flex;
-          flex-direction: column;
-          gap: 3px;
-        }
-        .layer .n {
-          font-size: 10px;
-          color: #6c5cff;
-          font-weight: 700;
-        }
-        .layer .t {
-          font-size: 12.5px;
-          font-weight: 600;
-          color: #e3e3ec;
-        }
-        .layer .s {
-          font-size: 11px;
-          color: #7c7d8e;
-          line-height: 1.3;
-        }
-        .try {
-          font-size: 12px;
-          color: #7c7d8e;
-          margin: 0 0 9px;
-          text-transform: uppercase;
-          letter-spacing: 0.09em;
+        .lede {
+          margin: 0 0 26px;
+          font-size: 15.5px;
+          line-height: 1.6;
+          color: var(--muted);
+          max-width: 46ch;
         }
         .examples {
           display: flex;
-          flex-direction: column;
-          gap: 8px;
+          flex-wrap: wrap;
+          gap: 9px;
         }
         .examples button {
-          text-align: left;
-          background: #121218;
-          border: 1px solid #22222e;
-          border-radius: 11px;
-          padding: 12px 14px;
-          cursor: pointer;
-          color: inherit;
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-          transition: border-color 0.15s, background 0.15s;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          background: var(--surface);
+          border: 1px solid var(--line);
+          color: var(--text);
+          border-radius: 999px;
+          padding: 9px 16px 9px 12px;
+          font-size: 13.5px;
+          font-weight: 500;
           font-family: inherit;
+          cursor: pointer;
+          transition: border-color 0.15s, background 0.15s, transform 0.15s;
         }
         .examples button:hover:not(:disabled) {
-          border-color: #4a3fd0;
-          background: #16161f;
+          background: var(--surface-2);
+          border-color: var(--line-bright);
+          transform: translateY(-1px);
         }
-        .examples b {
-          font-size: 13.5px;
-          font-weight: 600;
-        }
-        .examples span {
-          font-size: 12.5px;
-          color: #8a8b9c;
-        }
-        .or {
-          font-size: 12.5px;
-          color: #6b6c7d;
-          margin: 14px 0 0;
+        .examples .dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, var(--accent), var(--accent-2));
         }
 
-        /* ---------- thread ---------- */
         .thread {
           display: flex;
           flex-direction: column;
-          gap: 13px;
-          padding-bottom: 6px;
+          gap: 14px;
         }
         .row {
           display: flex;
@@ -529,70 +441,64 @@ export default function Home() {
           justify-content: flex-end;
         }
         .bubble {
-          max-width: 90%;
-          padding: 11px 14px;
-          border-radius: 14px;
-          background: #14141b;
-          border: 1px solid #202029;
+          max-width: 88%;
+          padding: 12px 15px;
+          border-radius: 16px;
+          background: var(--surface);
+          border: 1px solid var(--line);
           font-size: 14.5px;
           line-height: 1.55;
         }
         .row.user .bubble {
-          background: #2a2578;
-          border-color: #3a34a0;
+          background: linear-gradient(135deg, #5b4ce0, #7c3aed);
+          border-color: transparent;
+          box-shadow: 0 6px 20px rgba(109, 92, 255, 0.28);
         }
         .bubble.failed {
-          background: #26161a;
-          border-color: #4d2530;
+          background: #24151a;
+          border-color: #532a35;
         }
         .text {
           white-space: pre-wrap;
         }
 
-        /* ---------- progress ---------- */
-        .stages {
-          margin-top: 10px;
-          min-width: 250px;
-        }
-        .stage {
-          display: flex;
+        .working {
+          display: grid;
+          grid-template-columns: auto 1fr;
+          align-items: center;
           gap: 9px;
-          align-items: baseline;
-          padding: 3px 0;
-          font-size: 13px;
-          color: #55566a;
-          transition: color 0.2s;
+          margin-top: 4px;
+          min-width: 240px;
         }
-        .stage.on {
-          color: #9fa0b4;
+        .phase {
+          font-size: 13.5px;
+          color: var(--muted);
         }
-        .stage.active {
-          color: #ecedf5;
+        .bar {
+          grid-column: 1 / -1;
+          height: 3px;
+          background: #23252f;
+          border-radius: 3px;
+          overflow: hidden;
+          margin-top: 4px;
         }
-        .mark {
-          width: 13px;
-          flex: none;
-          font-size: 11px;
-          color: #4ec98a;
-          display: inline-flex;
-          justify-content: center;
-        }
-        .stage:not(.on) .mark {
-          color: #35364a;
-        }
-        .lbl {
-          line-height: 1.45;
+        .bar i {
+          display: block;
+          height: 100%;
+          border-radius: 3px;
+          background: linear-gradient(90deg, var(--accent), var(--accent-2));
+          transition: width 0.6s ease;
         }
         .spin {
-          width: 10px;
-          height: 10px;
-          border: 2px solid #6c5cff;
+          width: 13px;
+          height: 13px;
+          border: 2px solid var(--accent);
           border-top-color: transparent;
           border-radius: 50%;
           display: inline-block;
-          animation: rot 0.7s linear infinite;
+          animation: rot 0.75s linear infinite;
         }
-        .spin.dark {
+        .spin.light {
           border-color: #fff;
           border-top-color: transparent;
         }
@@ -601,196 +507,146 @@ export default function Home() {
             transform: rotate(360deg);
           }
         }
-        .bar {
-          height: 3px;
-          background: #1e1e28;
-          border-radius: 2px;
-          margin-top: 10px;
-          overflow: hidden;
-        }
-        .bar span {
-          display: block;
-          height: 100%;
-          background: linear-gradient(90deg, #4a3fd0, #6c5cff);
-          transition: width 0.5s ease;
-        }
-        .preview {
-          margin-top: 10px;
-          font-size: 12.5px;
-          color: #8a8b9c;
-          border-left: 2px solid #3a34a0;
-          padding-left: 9px;
-        }
-        .preview b {
-          color: #d7d8e6;
-          font-weight: 600;
-        }
 
-        /* ---------- result ---------- */
         .result {
           margin-top: 12px;
         }
-        .result video {
-          width: 100%;
-          max-width: 264px;
-          aspect-ratio: 9 / 16;
-          max-height: 62vh;
-          border-radius: 13px;
-          background: #000;
-          display: block;
-          border: 1px solid #24242f;
-          object-fit: contain;
-        }
-        .urlrow {
-          display: flex;
-          gap: 6px;
-          align-items: center;
-          margin-top: 10px;
-          max-width: 264px;
-        }
-        .urlrow input {
-          flex: 1;
-          min-width: 0;
-          background: #0e0e14;
-          border: 1px solid #22222d;
-          border-radius: 8px;
-          padding: 7px 9px;
-          font-size: 11.5px;
-          color: #9fa0b4;
-          font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        }
-        .urlrow button,
-        .urlrow a {
-          flex: none;
-          font-size: 11.5px;
-          padding: 7px 10px;
-          border-radius: 8px;
-          border: 1px solid #22222d;
-          background: #16161f;
-          color: #c3c4d4;
-          cursor: pointer;
-          text-decoration: none;
-          font-family: inherit;
-        }
-        .urlrow a:hover,
-        .urlrow button:hover {
-          border-color: #4a3fd0;
-          color: #fff;
-        }
+        .result video,
         .noplay {
           width: 100%;
-          max-width: 264px;
+          max-width: 258px;
           aspect-ratio: 9 / 16;
-          max-height: 62vh;
-          border-radius: 13px;
-          border: 1px dashed #33333f;
-          background: #101017;
+          max-height: 60vh;
+          border-radius: 14px;
+          display: block;
+          background: #000;
+          border: 1px solid var(--line);
+          box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55);
+          object-fit: contain;
+        }
+        .noplay {
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
           gap: 6px;
-          padding: 20px;
+          padding: 22px;
           text-align: center;
           font-size: 13px;
+          border-style: dashed;
         }
         .noplay p {
           margin: 0;
         }
-        .picks {
-          list-style: none;
-          margin: 10px 0 0;
-          padding: 9px 11px;
-          max-width: 264px;
-          background: #101017;
-          border: 1px solid #1f1f29;
-          border-radius: 9px;
-          font-size: 12px;
-          color: #c3c4d4;
+        .muted {
+          color: var(--muted);
         }
-        .picks li {
+        .actions {
           display: flex;
           gap: 8px;
-          padding: 2px 0;
-          line-height: 1.4;
+          margin-top: 11px;
+          max-width: 258px;
         }
-        .picks span {
-          flex: none;
-          width: 52px;
-          color: #6b6c7d;
-          text-transform: uppercase;
-          font-size: 10px;
-          letter-spacing: 0.07em;
-          padding-top: 2px;
+        .actions button,
+        .actions a {
+          flex: 1;
+          text-align: center;
+          font-size: 12.5px;
+          font-weight: 500;
+          padding: 9px 10px;
+          border-radius: 10px;
+          border: 1px solid var(--line);
+          background: var(--surface-2);
+          color: var(--text);
+          cursor: pointer;
+          text-decoration: none;
+          font-family: inherit;
+          transition: border-color 0.15s, background 0.15s;
         }
-        .expiry {
-          font-size: 11.5px;
-          color: #63647a;
-          margin: 8px 0 0;
+        .actions button:hover,
+        .actions a:hover {
+          border-color: var(--line-bright);
+          background: #20222e;
         }
         details {
-          margin-top: 10px;
-          font-size: 12.5px;
-          color: #8a8b9c;
+          margin-top: 11px;
+          font-size: 12px;
+          color: var(--muted);
+          max-width: 258px;
         }
         details summary {
           cursor: pointer;
+          list-style: none;
+        }
+        details summary::-webkit-details-marker {
+          display: none;
+        }
+        details summary::before {
+          content: "▸ ";
+        }
+        details[open] summary::before {
+          content: "▾ ";
         }
         details ul {
-          margin: 8px 0 0;
-          padding-left: 17px;
+          margin: 7px 0 0;
+          padding-left: 15px;
         }
         details li {
           margin: 3px 0;
           line-height: 1.45;
           word-break: break-word;
         }
-        .muted {
-          color: #6b6c7d;
-        }
 
-        /* ---------- composer ---------- */
         form {
           flex: none;
-          display: flex;
-          gap: 8px;
-          padding-top: 13px;
+          padding-top: 14px;
         }
-        form input {
+        .field {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          background: var(--surface-2);
+          border: 1px solid var(--line-bright);
+          border-radius: 15px;
+          padding: 6px 6px 6px 16px;
+          box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5);
+          transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .field:focus-within {
+          border-color: var(--accent);
+          box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5), 0 0 0 3px rgba(109, 92, 255, 0.18);
+        }
+        .field input {
           flex: 1;
           min-width: 0;
-          background: #121219;
-          border: 1px solid #24242f;
-          color: inherit;
-          border-radius: 11px;
-          padding: 12px 14px;
+          background: transparent;
+          border: 0;
+          outline: none;
+          color: var(--text);
           font-size: 15px;
           font-family: inherit;
+          padding: 10px 0;
         }
-        form input:focus {
-          outline: none;
-          border-color: #4a3fd0;
+        .field input::placeholder {
+          color: #6c7085;
         }
-        form input:disabled {
-          opacity: 0.6;
-        }
-        form button {
+        .field button {
           flex: none;
-          background: #5b4ce0;
-          color: #fff;
-          border: 0;
+          width: 38px;
+          height: 38px;
           border-radius: 11px;
-          min-width: 74px;
-          height: 45px;
-          font-size: 14.5px;
-          font-weight: 600;
+          border: 0;
+          background: linear-gradient(135deg, var(--accent), var(--accent-2));
+          color: #fff;
           cursor: pointer;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          font-family: inherit;
         }
-        form button:disabled,
+        .field button:disabled {
+          opacity: 0.4;
+          cursor: default;
+        }
         .examples button:disabled {
           opacity: 0.45;
           cursor: default;
@@ -798,23 +654,33 @@ export default function Home() {
 
         @media (max-width: 460px) {
           main {
-            padding: 14px 12px 12px;
-          }
-          .layers {
-            grid-template-columns: repeat(2, 1fr);
+            padding: 16px 14px 14px;
           }
           .bubble {
             max-width: 100%;
           }
           .result video,
-          .urlrow {
+          .noplay,
+          .actions,
+          details {
             max-width: 100%;
-          }
-          header p {
-            font-size: 12.5px;
           }
         }
       `}</style>
     </main>
+  );
+}
+
+function ArrowUp() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 19V5M12 5l-6 6M12 5l6 6"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
